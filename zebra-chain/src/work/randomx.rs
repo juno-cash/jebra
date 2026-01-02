@@ -4,7 +4,7 @@
 //! and memory-hard techniques. This module provides the Juno Cash-specific configuration
 //! and integration with the randomx-rs crate.
 
-use std::sync::{Arc, Mutex, OnceLock};
+use std::cell::RefCell;
 
 use crate::block::Height;
 use crate::work::difficulty::{ExpandedDifficulty, U256};
@@ -73,38 +73,73 @@ pub enum SeedInfo {
     BlockHash(Height),
 }
 
-/// Global RandomX VM cache manager.
+/// Thread-local RandomX VM cache.
 ///
-/// This manages RandomX VMs and caches to avoid expensive reinitialization.
-/// VMs are cached per seed hash.
-static RANDOMX_CACHE: OnceLock<Arc<Mutex<RandomXCache>>> = OnceLock::new();
-
-/// RandomX cache manager for efficient VM reuse.
-pub struct RandomXCache {
-    /// Current seed hash
-    current_seed: Option<[u8; 32]>,
-    /// Whether we're in fast mode (full dataset) or light mode (cache only)
-    fast_mode: bool,
+/// Each thread gets its own cached VM to avoid expensive reinitialization
+/// and to work around RandomXVM not being Send/Sync.
+thread_local! {
+    static RANDOMX_VM_CACHE: RefCell<CachedRandomXVM> = RefCell::new(CachedRandomXVM::new());
 }
 
-impl RandomXCache {
-    /// Create a new RandomX cache manager.
-    pub fn new(fast_mode: bool) -> Self {
+/// Cached RandomX VM for efficient hash computation.
+///
+/// The RandomX cache takes ~1 second to initialize, so we cache the VM
+/// and only reinitialize when the seed changes.
+pub struct CachedRandomXVM {
+    /// Current seed hash
+    current_seed: Option<[u8; 32]>,
+    /// Cached VM (if initialized)
+    vm: Option<randomx_rs::RandomXVM>,
+    /// Cached cache (needed to keep VM alive)
+    #[allow(dead_code)]
+    cache: Option<randomx_rs::RandomXCache>,
+}
+
+impl CachedRandomXVM {
+    /// Create a new cached VM manager.
+    pub fn new() -> Self {
         Self {
             current_seed: None,
-            fast_mode,
+            vm: None,
+            cache: None,
         }
     }
 
-    /// Get the global cache instance.
-    pub fn global() -> Arc<Mutex<RandomXCache>> {
-        RANDOMX_CACHE
-            .get_or_init(|| Arc::new(Mutex::new(RandomXCache::new(false))))
-            .clone()
+    /// Compute a hash, initializing or reinitializing the VM as needed.
+    pub fn hash(&mut self, seed: &[u8; 32], input: &[u8]) -> Result<[u8; 32], RandomXError> {
+        use randomx_rs::{RandomXCache, RandomXFlag, RandomXVM};
+
+        // Check if we need to reinitialize for a new seed
+        if self.current_seed.as_ref() != Some(seed) {
+            tracing::info!("initializing RandomX VM with new seed");
+            let flags = RandomXFlag::get_recommended_flags();
+
+            // Create new cache with the seed
+            let cache = RandomXCache::new(flags, seed)
+                .map_err(|e| RandomXError::CacheInit(e.to_string()))?;
+
+            // Create new VM
+            let vm = RandomXVM::new(flags, Some(cache.clone()), None)
+                .map_err(|e| RandomXError::VmInit(e.to_string()))?;
+
+            self.current_seed = Some(*seed);
+            self.vm = Some(vm);
+            self.cache = Some(cache);
+            tracing::info!("RandomX VM initialized successfully");
+        }
+
+        // Use cached VM to compute hash
+        let vm = self.vm.as_ref().ok_or(RandomXError::VmInit("VM not initialized".to_string()))?;
+        let hash = vm.calculate_hash(input)
+            .map_err(|e| RandomXError::Hash(e.to_string()))?;
+
+        let mut result = [0u8; 32];
+        result.copy_from_slice(&hash);
+        Ok(result)
     }
 }
 
-/// Calculate a RandomX hash.
+/// Calculate a RandomX hash using the thread-local cached VM.
 ///
 /// # Arguments
 /// * `seed` - The 32-byte seed hash (block hash at seed height or genesis seed)
@@ -113,24 +148,9 @@ impl RandomXCache {
 /// # Returns
 /// The 32-byte RandomX hash, or an error if hashing fails.
 pub fn randomx_hash(seed: &[u8; 32], input: &[u8]) -> Result<[u8; 32], RandomXError> {
-    use randomx_rs::{RandomXCache, RandomXFlag, RandomXVM};
-
-    // Create flags for light mode (no full dataset)
-    let flags = RandomXFlag::get_recommended_flags();
-
-    // Create cache with the seed
-    let cache = RandomXCache::new(flags, seed).map_err(|e| RandomXError::CacheInit(e.to_string()))?;
-
-    // Create VM
-    let vm = RandomXVM::new(flags, Some(cache), None).map_err(|e| RandomXError::VmInit(e.to_string()))?;
-
-    // Calculate hash
-    let hash = vm.calculate_hash(input).map_err(|e| RandomXError::Hash(e.to_string()))?;
-
-    // Convert to fixed-size array
-    let mut result = [0u8; 32];
-    result.copy_from_slice(&hash);
-    Ok(result)
+    RANDOMX_VM_CACHE.with(|cache| {
+        cache.borrow_mut().hash(seed, input)
+    })
 }
 
 /// Verify a RandomX proof of work.

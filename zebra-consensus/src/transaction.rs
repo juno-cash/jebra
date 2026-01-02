@@ -416,6 +416,19 @@ where
             check::has_enough_orchard_flags(&tx)?;
             check::consensus_branch_id(&tx, req.height(), &network)?;
 
+            // ========================================================================
+            // Juno Cash: Orchard-only chain consensus rules
+            // ========================================================================
+            // These checks apply to all transactions on Juno Cash:
+            // - No Sprout JoinSplits (Orchard-only chain)
+            // - No Sapling spends/outputs (Orchard-only chain)
+            // - No Orchard-to-transparent after height 40000 (no unshielding)
+            // - No transparent-to-transparent after height 40000 (must shield)
+            check::juno_no_sprout_joinsplits(&tx)?;
+            check::juno_no_sapling_spends_or_outputs(&tx)?;
+            check::juno_no_orchard_to_transparent(&tx, req.height())?;
+            check::juno_no_transparent_to_transparent(&tx, req.height())?;
+
             // Validate the coinbase input consensus rules
             if req.is_mempool() && tx.is_coinbase() {
                 return Err(TransactionError::CoinbaseInMempool);

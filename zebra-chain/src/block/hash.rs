@@ -87,6 +87,12 @@ impl From<[u8; 32]> for Hash {
 
 impl<'a> From<&'a Header> for Hash {
     fn from(block_header: &'a Header) -> Self {
+        // Juno Cash: For RandomX solutions, the block hash IS the solution
+        if let Some(randomx_hash) = block_header.solution.randomx_hash() {
+            return Self(randomx_hash);
+        }
+
+        // Zcash/Equihash: Block hash is SHA256d of the serialized header
         let mut hash_writer = sha256d::Writer::default();
         block_header
             .zcash_serialize(&mut hash_writer)

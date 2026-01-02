@@ -113,12 +113,12 @@ impl Tracing {
             }
 
             eprintln!(
-                "Thank you for running a {} zebrad {} node!",
+                "Thank you for running a {} jebrad {} node!",
                 network.lowercase_name(),
                 build_version()
             );
             eprintln!(
-                "You're helping to strengthen the network and contributing to a social good :)"
+                "You're helping to strengthen the Juno Cash network :)"
             );
         }
 

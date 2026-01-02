@@ -132,10 +132,10 @@ pub struct Config {
     ///
     /// |Platform | Value                                           | Example                              |
     /// | ------- | ----------------------------------------------- | ------------------------------------ |
-    /// | Linux   | `$XDG_CACHE_HOME/zebra` or `$HOME/.cache/zebra` | `/home/alice/.cache/zebra`           |
-    /// | macOS   | `$HOME/Library/Caches/zebra`                    | `/Users/Alice/Library/Caches/zebra`  |
-    /// | Windows | `{FOLDERID_LocalAppData}\zebra`                 | `C:\Users\Alice\AppData\Local\zebra` |
-    /// | Other   | `std::env::current_dir()/cache/zebra`           | `/cache/zebra`                       |
+    /// | Linux   | `$XDG_CACHE_HOME/jebra` or `$HOME/.cache/jebra` | `/home/alice/.cache/jebra`           |
+    /// | macOS   | `$HOME/Library/Caches/jebra`                    | `/Users/Alice/Library/Caches/jebra`  |
+    /// | Windows | `{FOLDERID_LocalAppData}\jebra`                 | `C:\Users\Alice\AppData\Local\jebra` |
+    /// | Other   | `std::env::current_dir()/cache/jebra`           | `/cache/jebra`                       |
     ///
     /// # Security
     ///
@@ -545,25 +545,26 @@ impl Config {
 
 impl Default for Config {
     fn default() -> Config {
+        // Juno Cash DNS seeders
         let mainnet_peers = [
-            "dnsseed.z.cash:8233",
-            "dnsseed.str4d.xyz:8233",
-            "mainnet.seeder.zfnd.org:8233",
+            "dnsseed.junomoneta.io:8234",
+            "dnsseed.juno.cash:8234",
         ]
         .iter()
         .map(|&s| String::from(s))
         .collect();
 
         let testnet_peers = [
-            "dnsseed.testnet.z.cash:18233",
-            "testnet.seeder.zfnd.org:18233",
+            "dnsseed.testnet.junomoneta.io:18234",
+            "dnsseed.testnet.juno.cash:18234",
         ]
         .iter()
         .map(|&s| String::from(s))
         .collect();
 
         Config {
-            listen_addr: "[::]:8233"
+            // Juno Cash mainnet port
+            listen_addr: "[::]:8234"
                 .parse()
                 .expect("Hardcoded address should be parseable"),
             external_addr: None,

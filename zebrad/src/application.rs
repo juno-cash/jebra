@@ -159,7 +159,7 @@ pub fn release_version() -> Version {
 /// [BIP 14]: https://github.com/bitcoin/bips/blob/master/bip-0014.mediawiki
 pub fn user_agent() -> String {
     let release_version = release_version();
-    format!("/Zebra:{release_version}/")
+    format!("/Jebra:{release_version}/")
 }
 
 /// Zebrad Application
@@ -292,7 +292,7 @@ impl Application for ZebradApp {
             // build-time constant: cargo or git tag + short commit
             ("version", build_version().to_string()),
             // config
-            ("Zcash network", config.network.network.to_string()),
+            ("Juno Cash network", config.network.network.to_string()),
             // code constant
             (
                 "running state version",

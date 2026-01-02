@@ -146,17 +146,16 @@ pub(crate) fn parse_coinbase_height(
                 Err(SerializationError::Parse("Invalid block height"))
             }
         }
-        // The genesis block does not encode the block height by mistake; special case it.
-        // The first five bytes are [4, 255, 255, 7, 31], the little-endian encoding of
-        // 520_617_983.
-        //
-        // In the far future, Zcash might reach this height, and the miner might use the
-        // same coinbase data as the genesis block. So we need an updated consensus rule
-        // to handle this edge case.
-        //
-        // TODO: update this check based on the consensus rule changes in
-        //       https://github.com/zcash/zips/issues/540
-        (Some(0x04), _) if data[..] == GENESIS_COINBASE_DATA[..] => {
+        // Juno Cash: Height 0 encoded properly as 0x01 0x00 (one byte, value 0)
+        // Unlike Zcash, Juno Cash may encode genesis block height correctly.
+        (Some(0x01), len) if len >= 2 && data[1] == 0x00 => {
+            Ok((Height(0), CoinbaseData(data.split_off(2))))
+        }
+        // Genesis block detection: The first five bytes are [4, 255, 255, 7, 31],
+        // the little-endian encoding of 520_617_983. This is used by both Zcash and
+        // Juno Cash genesis blocks (they share the same genesis coinbase height encoding).
+        // If the height would parse as 520_617_983, treat it as height 0 (genesis block).
+        (Some(0x04), len) if len >= 5 && data[1] == 0xFF && data[2] == 0xFF && data[3] == 0x07 && data[4] == 0x1F => {
             Ok((Height(0), CoinbaseData(data)))
         }
         // As noted above, this is included for completeness.
@@ -193,7 +192,7 @@ pub(crate) fn parse_coinbase_height(
 /// coinbase height,
 pub(crate) fn write_coinbase_height<W: io::Write>(
     height: block::Height,
-    coinbase_data: &CoinbaseData,
+    _coinbase_data: &CoinbaseData,
     mut w: W,
 ) -> Result<(), io::Error> {
     // We can't write this as a match statement on stable until exclusive range
@@ -201,15 +200,10 @@ pub(crate) fn write_coinbase_height<W: io::Write>(
     // The Bitcoin encoding requires that the most significant byte is below 0x80,
     // so the ranges run up to 2^{n-1} rather than 2^n.
     if let 0 = height.0 {
-        // The genesis block's coinbase data does not have a height prefix.
-        // So we return an error if the entire coinbase data doesn't match genesis.
-        // (If we don't do this check, then deserialization will fail.)
-        //
-        // TODO: update this check based on the consensus rule changes in
-        //       https://github.com/zcash/zips/issues/540
-        if coinbase_data.0 != GENESIS_COINBASE_DATA {
-            return Err(io::Error::other("invalid genesis coinbase data"));
-        }
+        // For genesis blocks (both Zcash and Juno Cash), the coinbase data already includes
+        // the [4, 255, 255, 7, 31] pattern that encodes as "height 520617983" when parsed
+        // as a regular script. This is a historical quirk - we preserve it as-is.
+        // Do NOT add any height prefix for genesis blocks.
     } else if let h @ 1..=16 = height.0 {
         w.write_u8(0x50 + (h as u8))?;
     } else if let h @ 17..=127 = height.0 {

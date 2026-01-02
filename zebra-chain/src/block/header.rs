@@ -139,6 +139,48 @@ impl Header {
     pub fn hash(&self) -> Hash {
         Hash::from(self)
     }
+
+    /// Returns the 140-byte mining input for RandomX proof-of-work.
+    ///
+    /// This includes: version (4) + previous_block_hash (32) + merkle_root (32) +
+    /// commitment_bytes (32) + time (4) + difficulty_threshold (4) + nonce (32) = 140 bytes.
+    ///
+    /// The solution is NOT included because for RandomX, the solution IS the hash
+    /// of this 140-byte input.
+    #[cfg(feature = "internal-miner")]
+    pub fn mining_input(&self) -> [u8; 140] {
+        use byteorder::{LittleEndian, WriteBytesExt};
+        use std::io::Write;
+
+        let mut input = [0u8; 140];
+        let mut cursor = std::io::Cursor::new(&mut input[..]);
+
+        // version: 4 bytes
+        cursor.write_u32::<LittleEndian>(self.version).unwrap();
+        // previous_block_hash: 32 bytes
+        cursor.write_all(&self.previous_block_hash.0).unwrap();
+        // merkle_root: 32 bytes
+        cursor.write_all(&self.merkle_root.0).unwrap();
+        // commitment_bytes: 32 bytes
+        cursor.write_all(&self.commitment_bytes[..]).unwrap();
+        // time: 4 bytes
+        cursor
+            .write_u32::<LittleEndian>(
+                self.time
+                    .timestamp()
+                    .try_into()
+                    .expect("timestamp fits in u32"),
+            )
+            .unwrap();
+        // difficulty_threshold: 4 bytes
+        cursor
+            .write_u32::<LittleEndian>(self.difficulty_threshold.0)
+            .unwrap();
+        // nonce: 32 bytes
+        cursor.write_all(&self.nonce[..]).unwrap();
+
+        input
+    }
 }
 
 /// A header with a count of the number of transactions in its block.

@@ -19,28 +19,40 @@ use lazy_static::lazy_static;
 use crate::{
     amount::{self, Amount, NonNegative, COIN},
     block::{Height, HeightDiff},
-    parameters::{constants::activation_heights, Network, NetworkUpgrade},
+    parameters::{Network, NetworkUpgrade},
     transparent,
 };
 
 /// The largest block subsidy, used before the first halving.
 ///
-/// We use `25 / 2` instead of `12.5`, so that we can calculate the correct value without using floating-point.
-/// This calculation is exact, because COIN is divisible by 2, and the division is done last.
+/// Juno Cash: 12.5 COIN during plateau phase.
 pub const MAX_BLOCK_SUBSIDY: u64 = ((25 * COIN) / 2) as u64;
 
 /// Used as a multiplier to get the new halving interval after Blossom.
 ///
-/// Calculated as `PRE_BLOSSOM_POW_TARGET_SPACING / POST_BLOSSOM_POW_TARGET_SPACING`
-/// in the Zcash specification.
+/// Juno Cash: PRE_BLOSSOM = 120s, POST_BLOSSOM = 60s, ratio = 2.
 pub const BLOSSOM_POW_TARGET_SPACING_RATIO: u32 = 2;
 
-/// Halving is at about every 4 years, before Blossom block time is 150 seconds.
-///
-/// `(60 * 60 * 24 * 365 * 4) / 150 = 840960`
+/// Juno Cash slow start interval (blocks 1-20,000).
+pub const JUNO_SLOW_START_INTERVAL: u32 = 20_000;
+
+/// Juno Cash plateau end height.
+pub const JUNO_PLATEAU_END: u32 = 120_000;
+
+/// Juno Cash initial halving end height.
+pub const JUNO_INITIAL_HALVING_END: u32 = 1_171_200;
+
+/// Juno Cash standard halving interval (blocks after initial halving).
+pub const JUNO_STANDARD_HALVING_INTERVAL: u32 = 2_102_400;
+
+/// Juno Cash maximum height (21M cap enforcement).
+pub const JUNO_MAX_HEIGHT: u32 = 16_508_927;
+
+/// Pre-Blossom halving interval (legacy Zcash value, kept for compatibility).
 pub const PRE_BLOSSOM_HALVING_INTERVAL: HeightDiff = 840_000;
 
-/// After Blossom the block time is reduced to 75 seconds but halving period should remain around 4 years.
+/// Post-Blossom halving interval.
+/// Juno Cash: Uses custom emission schedule, not standard halving.
 pub const POST_BLOSSOM_HALVING_INTERVAL: HeightDiff =
     PRE_BLOSSOM_HALVING_INTERVAL * (BLOSSOM_POW_TARGET_SPACING_RATIO as HeightDiff);
 
@@ -251,122 +263,13 @@ impl FundingStreamRecipient {
 }
 
 lazy_static! {
-    /// The funding streams for Mainnet as described in:
-    /// - [protocol specification §7.10.1][7.10.1]
-    /// - [ZIP-1015](https://zips.z.cash/zip-1015)
-    /// - [ZIP-214#funding-streams](https://zips.z.cash/zip-0214#funding-streams)
-    ///
-    /// [7.10.1]: https://zips.z.cash/protocol/protocol.pdf#zip214fundingstreams
-    pub static ref FUNDING_STREAMS_MAINNET: Vec<FundingStreams> = vec![
-        FundingStreams {
-            height_range: Height(1_046_400)..Height(2_726_400),
-            recipients: [
-                (
-                    FundingStreamReceiver::Ecc,
-                    FundingStreamRecipient::new(7, FUNDING_STREAM_ECC_ADDRESSES_MAINNET),
-                ),
-                (
-                    FundingStreamReceiver::ZcashFoundation,
-                    FundingStreamRecipient::new(5, FUNDING_STREAM_ZF_ADDRESSES_MAINNET),
-                ),
-                (
-                    FundingStreamReceiver::MajorGrants,
-                    FundingStreamRecipient::new(8, FUNDING_STREAM_MG_ADDRESSES_MAINNET),
-                ),
-            ]
-            .into_iter()
-            .collect(),
-        },
-        FundingStreams {
-            height_range: POST_NU6_FUNDING_STREAM_START_RANGE_MAINNET,
-            recipients: [
-                (
-                    FundingStreamReceiver::Deferred,
-                    FundingStreamRecipient::new::<[&str; 0], &str>(12, []),
-                ),
-                (
-                    FundingStreamReceiver::MajorGrants,
-                    FundingStreamRecipient::new(8, POST_NU6_FUNDING_STREAM_FPF_ADDRESSES_MAINNET),
-                ),
-            ]
-            .into_iter()
-            .collect(),
-        },
+    /// The funding streams for Mainnet.
+    /// Juno Cash has no funding streams (no dev tax).
+    pub static ref FUNDING_STREAMS_MAINNET: Vec<FundingStreams> = vec![];
 
-        FundingStreams {
-            height_range: activation_heights::mainnet::NU6_1..Height(4_406_400),
-            recipients: [
-                (
-                    FundingStreamReceiver::Deferred,
-                    FundingStreamRecipient::new::<[&str; 0], &str>(12, []),
-                ),
-                (
-                    FundingStreamReceiver::MajorGrants,
-                    FundingStreamRecipient::new(8, POST_NU6_1_FUNDING_STREAM_FPF_ADDRESSES_MAINNET),
-                ),
-            ]
-            .into_iter()
-            .collect(),
-        },
-    ];
-
-    /// The funding streams for Testnet as described in:
-    /// - [protocol specification §7.10.1][7.10.1]
-    /// - [ZIP-1015](https://zips.z.cash/zip-1015)
-    /// - [ZIP-214#funding-streams](https://zips.z.cash/zip-0214#funding-streams)
-    ///
-    /// [7.10.1]: https://zips.z.cash/protocol/protocol.pdf#zip214fundingstreams
-    pub static ref FUNDING_STREAMS_TESTNET: Vec<FundingStreams> = vec![
-        FundingStreams {
-            height_range: Height(1_028_500)..Height(2_796_000),
-            recipients: [
-                (
-                    FundingStreamReceiver::Ecc,
-                    FundingStreamRecipient::new(7, FUNDING_STREAM_ECC_ADDRESSES_TESTNET),
-                ),
-                (
-                    FundingStreamReceiver::ZcashFoundation,
-                    FundingStreamRecipient::new(5, FUNDING_STREAM_ZF_ADDRESSES_TESTNET),
-                ),
-                (
-                    FundingStreamReceiver::MajorGrants,
-                    FundingStreamRecipient::new(8, FUNDING_STREAM_MG_ADDRESSES_TESTNET),
-                ),
-            ]
-            .into_iter()
-            .collect(),
-        },
-        FundingStreams {
-            height_range: POST_NU6_FUNDING_STREAM_START_RANGE_TESTNET,
-            recipients: [
-                (
-                    FundingStreamReceiver::Deferred,
-                    FundingStreamRecipient::new::<[&str; 0], &str>(12, []),
-                ),
-                (
-                    FundingStreamReceiver::MajorGrants,
-                    FundingStreamRecipient::new(8, POST_NU6_FUNDING_STREAM_FPF_ADDRESSES_TESTNET),
-                ),
-            ]
-            .into_iter()
-            .collect(),
-        },
-        FundingStreams {
-            height_range: activation_heights::testnet::NU6_1..Height(4_476_000),
-            recipients: [
-                (
-                    FundingStreamReceiver::Deferred,
-                    FundingStreamRecipient::new::<[&str; 0], &str>(12, []),
-                ),
-                (
-                    FundingStreamReceiver::MajorGrants,
-                    FundingStreamRecipient::new(8, POST_NU6_1_FUNDING_STREAM_FPF_ADDRESSES_TESTNET),
-                ),
-            ]
-            .into_iter()
-            .collect(),
-        },
-    ];
+    /// The funding streams for Testnet.
+    /// Juno Cash has no funding streams (no dev tax).
+    pub static ref FUNDING_STREAMS_TESTNET: Vec<FundingStreams> = vec![];
 }
 
 /// The start height of post-NU6 funding streams on Mainnet as described in [ZIP-1015](https://zips.z.cash/zip-1015).
@@ -377,33 +280,23 @@ const POST_NU6_FUNDING_STREAM_START_HEIGHT_TESTNET: u32 = 2_976_000;
 
 /// The one-time lockbox disbursement output addresses and amounts expected in the NU6.1 activation block's
 /// coinbase transaction on Mainnet.
-/// See:
-/// - <https://zips.z.cash/zip-0271#one-timelockboxdisbursement>
-/// - <https://zips.z.cash/zip-0214#mainnet-recipients-for-revision-2>
-pub const NU6_1_LOCKBOX_DISBURSEMENTS_MAINNET: [(&str, Amount<NonNegative>); 10] = [(
-    "t3ev37Q2uL1sfTsiJQJiWJoFzQpDhmnUwYo",
-    EXPECTED_NU6_1_LOCKBOX_DISBURSEMENTS_TOTAL_MAINNET.div_exact(10),
-); 10];
+/// Juno Cash has no lockbox disbursements.
+pub const NU6_1_LOCKBOX_DISBURSEMENTS_MAINNET: [(&str, Amount<NonNegative>); 0] = [];
 
 /// The one-time lockbox disbursement output addresses and amounts expected in the NU6.1 activation block's
 /// coinbase transaction on Testnet.
-/// See:
-/// - <https://zips.z.cash/zip-0271#one-timelockboxdisbursement>
-/// - <https://zips.z.cash/zip-0214#testnet-recipients-for-revision-2>
-pub const NU6_1_LOCKBOX_DISBURSEMENTS_TESTNET: [(&str, Amount<NonNegative>); 10] = [(
-    "t2RnBRiqrN1nW4ecZs1Fj3WWjNdnSs4kiX8",
-    EXPECTED_NU6_1_LOCKBOX_DISBURSEMENTS_TOTAL_TESTNET.div_exact(10),
-); 10];
+/// Juno Cash has no lockbox disbursements.
+pub const NU6_1_LOCKBOX_DISBURSEMENTS_TESTNET: [(&str, Amount<NonNegative>); 0] = [];
 
 /// The expected total amount of the one-time lockbox disbursement on Mainnet.
-/// See: <https://zips.z.cash/zip-0271#one-timelockboxdisbursement>.
+/// Juno Cash has no lockbox disbursements.
 pub(crate) const EXPECTED_NU6_1_LOCKBOX_DISBURSEMENTS_TOTAL_MAINNET: Amount<NonNegative> =
-    Amount::new_from_zec(78_750);
+    Amount::new(0);
 
 /// The expected total amount of the one-time lockbox disbursement on Testnet.
-/// See <https://zips.z.cash/zip-0271#one-timelockboxdisbursement>.
+/// Juno Cash has no lockbox disbursements.
 pub(crate) const EXPECTED_NU6_1_LOCKBOX_DISBURSEMENTS_TOTAL_TESTNET: Amount<NonNegative> =
-    Amount::new_from_zec(78_750);
+    Amount::new(0);
 
 /// The number of blocks contained in the post-NU6 funding streams height ranges on Mainnet or Testnet, as specified
 /// in [ZIP-1015](https://zips.z.cash/zip-1015).
@@ -703,34 +596,21 @@ pub fn funding_stream_address_period<N: ParameterSubsidy>(height: Height, networ
 
 /// The first block height of the halving at the provided halving index for a network.
 ///
-/// See `Halving(height)`, as described in [protocol specification §7.8][7.8]
-///
-/// [7.8]: https://zips.z.cash/protocol/protocol.pdf#subsidies
-pub fn height_for_halving(halving: u32, network: &Network) -> Option<Height> {
-    if halving == 0 {
-        return Some(Height(0));
+/// Juno Cash halving heights:
+/// - Halving 0: Block 0
+/// - Halving 1: Block 120,001 (first halving to 6.25 COIN)
+/// - Halving 2: Block 1,171,201 (to 3.125 COIN)
+/// - Halving 3+: Every 2,102,400 blocks after that
+pub fn height_for_halving(halving: u32, _network: &Network) -> Option<Height> {
+    match halving {
+        0 => Some(Height(0)),
+        1 => Some(Height(JUNO_PLATEAU_END + 1)), // 120,001
+        _ => {
+            // Standard halvings starting from index 2
+            let height = JUNO_INITIAL_HALVING_END + 1 + ((halving - 2) * JUNO_STANDARD_HALVING_INTERVAL);
+            Some(Height(height))
+        }
     }
-
-    let slow_start_shift = i64::from(network.slow_start_shift().0);
-    let blossom_height = i64::from(NetworkUpgrade::Blossom.activation_height(network)?.0);
-    let pre_blossom_halving_interval = network.pre_blossom_halving_interval();
-    let halving_index = i64::from(halving);
-
-    let unscaled_height = halving_index.checked_mul(pre_blossom_halving_interval)?;
-
-    let pre_blossom_height = unscaled_height
-        .min(blossom_height)
-        .checked_add(slow_start_shift)?;
-
-    let post_blossom_height = 0
-        .max(unscaled_height - blossom_height)
-        .checked_mul(i64::from(BLOSSOM_POW_TARGET_SPACING_RATIO))?
-        .checked_add(slow_start_shift)?;
-
-    let height = pre_blossom_height.checked_add(post_blossom_height)?;
-
-    let height = u32::try_from(height).ok()?;
-    height.try_into().ok()
 }
 
 /// Returns the `fs.Value(height)` for each stream receiver
@@ -805,69 +685,78 @@ pub fn halving_divisor(height: Height, network: &Network) -> Option<u64> {
 
 /// The halving index for a block height and network.
 ///
-/// `Halving(height)`, as described in [protocol specification §7.8][7.8]
-///
-/// [7.8]: https://zips.z.cash/protocol/protocol.pdf#subsidies
-pub fn num_halvings(height: Height, network: &Network) -> u32 {
-    let slow_start_shift = network.slow_start_shift();
-    let blossom_height = NetworkUpgrade::Blossom
-        .activation_height(network)
-        .expect("blossom activation height should be available");
+/// Juno Cash halving schedule:
+/// - Height 0-120,000: Halving 0 (pre-halving phase)
+/// - Height 120,001-1,171,200: Halving 1 (initial halving epoch, 6.25 COIN)
+/// - Height 1,171,201+: Halving 2+ (standard halvings every 2,102,400 blocks)
+pub fn num_halvings(height: Height, _network: &Network) -> u32 {
+    let h = height.0;
 
-    let halving_index = if height < slow_start_shift {
-        0
-    } else if height < blossom_height {
-        let pre_blossom_height = height - slow_start_shift;
-        pre_blossom_height / network.pre_blossom_halving_interval()
-    } else {
-        let pre_blossom_height = blossom_height - slow_start_shift;
-        let scaled_pre_blossom_height =
-            pre_blossom_height * HeightDiff::from(BLOSSOM_POW_TARGET_SPACING_RATIO);
+    if h <= JUNO_PLATEAU_END {
+        return 0; // Pre-halving phase
+    }
 
-        let post_blossom_height = height - blossom_height;
+    if h <= JUNO_INITIAL_HALVING_END {
+        return 1; // Initial halving epoch (6.25 COIN)
+    }
 
-        (scaled_pre_blossom_height + post_blossom_height) / network.post_blossom_halving_interval()
-    };
-
-    halving_index
-        .try_into()
-        .expect("already checked for negatives")
+    // Standard halvings: starting from halving index 2
+    2 + ((h - JUNO_INITIAL_HALVING_END) / JUNO_STANDARD_HALVING_INTERVAL)
 }
 
-/// `BlockSubsidy(height)` as described in [protocol specification §7.8][7.8]
+/// `BlockSubsidy(height)` - Juno Cash emission schedule.
 ///
-/// [7.8]: https://zips.z.cash/protocol/protocol.pdf#subsidies
+/// Emission schedule with ~21,000,000 JUNO maximum supply:
+/// - Block 0: 0 coins (genesis block)
+/// - Blocks 1-20,000: Slow start (0.25 -> 12.5 coins linear)
+/// - Blocks 20,001-120,000: Plateau (12.5 coins constant)
+/// - Blocks 120,001-1,171,200: Initial halving (6.25 coins)
+/// - Blocks 1,171,201+: Standard halvings every 2,102,400 blocks
+/// - After block 16,508,927: 0 coins (21M cap reached)
 pub fn block_subsidy(
     height: Height,
-    network: &Network,
+    _network: &Network,
 ) -> Result<Amount<NonNegative>, SubsidyError> {
-    let blossom_height = NetworkUpgrade::Blossom
-        .activation_height(network)
-        .expect("blossom activation height should be available");
+    let h = height.0;
 
-    // If the halving divisor is larger than u64::MAX, the block subsidy is zero,
-    // because amounts fit in an i64.
-    //
-    // Note: bitcoind incorrectly wraps here, which restarts large block rewards.
-    let Some(halving_div) = halving_divisor(height, network) else {
+    // Maximum supply enforcement - hard cap at 21M
+    if h > JUNO_MAX_HEIGHT {
         return Ok(Amount::zero());
-    };
-
-    // Zebra doesn't need to calculate block subsidies for blocks with heights in the slow start
-    // interval because it handles those blocks through checkpointing.
-    if height < network.slow_start_interval() {
-        Err(SubsidyError::UnsupportedHeight)
-    } else if height < blossom_height {
-        // this calculation is exact, because the halving divisor is 1 here
-        Ok(Amount::try_from(MAX_BLOCK_SUBSIDY / halving_div)?)
-    } else {
-        let scaled_max_block_subsidy =
-            MAX_BLOCK_SUBSIDY / u64::from(BLOSSOM_POW_TARGET_SPACING_RATIO);
-        // in future halvings, this calculation might not be exact
-        // Amount division is implemented using integer division,
-        // which truncates (rounds down) the result, as specified
-        Ok(Amount::try_from(scaled_max_block_subsidy / halving_div)?)
     }
+
+    // Genesis block
+    if h == 0 {
+        return Ok(Amount::zero());
+    }
+
+    // Slow start: linear ramp from 0.25 to 12.5 COIN over 20,000 blocks
+    // Formula: subsidy = 0.25 + (height - 1) * (12.25 / 19999)
+    // In monetas: subsidy = 25000000 + ((height - 1) * 1225000000) / 19999
+    if h <= JUNO_SLOW_START_INTERVAL {
+        let subsidy = 25_000_000i64 + (((h as i64 - 1) * 1_225_000_000i64) / 19999);
+        return Ok(Amount::try_from(subsidy)?);
+    }
+
+    // Plateau: constant 12.5 COIN for 100,000 blocks
+    if h <= JUNO_PLATEAU_END {
+        return Ok(Amount::try_from(1_250_000_000i64)?); // 12.5 * COIN
+    }
+
+    // Initial halving epoch: 6.25 COIN for 1,051,200 blocks (120,001-1,171,200)
+    if h <= JUNO_INITIAL_HALVING_END {
+        return Ok(Amount::try_from(625_000_000i64)?); // 6.25 * COIN
+    }
+
+    // Standard halvings: starting from 3.125 COIN, halving every 2,102,400 blocks
+    let halvings = (h - JUNO_INITIAL_HALVING_END) / JUNO_STANDARD_HALVING_INTERVAL;
+
+    // Force block reward to zero when right shift is undefined
+    if halvings >= 64 {
+        return Ok(Amount::zero());
+    }
+
+    let subsidy = 312_500_000i64 >> halvings; // 3.125 * COIN >> halvings
+    Ok(Amount::try_from(subsidy)?)
 }
 
 /// `MinerSubsidy(height)` as described in [protocol specification §7.8][7.8]

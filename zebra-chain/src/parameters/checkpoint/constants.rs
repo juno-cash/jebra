@@ -9,7 +9,9 @@
 /// `zcashd`'s maximum `FindBlocks` response size is 500 hashes. `zebrad` uses
 /// 1 hash to verify the tip, and discards 1-2 hashes to work around `zcashd`
 /// bugs. So the most efficient gap is slightly less than 500 blocks.
-pub const MAX_CHECKPOINT_HEIGHT_GAP: usize = 400;
+// Juno Cash: Increased to 512 to align with RandomX epoch boundaries (2048 blocks)
+// 2048 / 4 = 512, so checkpoints at 512-block intervals hit all epoch boundaries
+pub const MAX_CHECKPOINT_HEIGHT_GAP: usize = 512;
 
 /// We limit the memory usage and download contention for each checkpoint,
 /// based on the cumulative size of the serialized blocks in the chain.

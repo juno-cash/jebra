@@ -14,11 +14,13 @@ use zebra_chain::{
         subsidy::{FundingStreamReceiver, SubsidyError},
         Network, NetworkUpgrade,
     },
+    serialization::ZcashSerialize,
     transaction::{self, Transaction},
     transparent::Output,
     work::{
         difficulty::{ExpandedDifficulty, ParameterDifficulty as _},
-        equihash,
+        equihash::{self, Solution},
+        randomx::{self, RandomXError, SeedInfo},
     },
 };
 
@@ -88,7 +90,10 @@ pub fn difficulty_threshold_is_valid(
 
     // The PowLimit check is part of `Threshold()` in the spec, but it doesn't
     // actually depend on any previous blocks.
-    if difficulty_threshold > network.target_difficulty_limit() {
+    // Juno Cash: Skip powLimit check for genesis block (height 0) because the
+    // genesis block was mined with an easier difficulty (0x2000ffff) than the
+    // standard powLimit (0x1f07ffff) to bootstrap the chain.
+    if *height != Height(0) && difficulty_threshold > network.target_difficulty_limit() {
         Err(BlockError::TargetDifficultyLimit(
             *height,
             *hash,
@@ -148,6 +153,72 @@ pub fn equihash_solution_is_valid(header: &Header) -> Result<(), equihash::Error
     header.solution.check(header)
 }
 
+/// Returns `Ok(())` if the RandomX solution is valid for `header`.
+///
+/// This function validates Juno Cash blocks that use RandomX proof-of-work.
+/// The seed hash is determined by the block height:
+/// - For heights 0-2144: use the genesis seed (0x08 followed by 31 zero bytes)
+/// - For later heights: use the block hash at the seed height
+///
+/// # Arguments
+/// * `header` - The block header to validate
+/// * `height` - The height of the block
+/// * `seed_block_hash` - If the height requires a block hash seed, this is the hash
+///                       at the seed height. For genesis epoch blocks, this is ignored.
+///
+/// # Returns
+/// `Ok(())` if the RandomX solution is valid, or an error if validation fails.
+pub fn randomx_solution_is_valid(
+    header: &Header,
+    height: &Height,
+    seed_block_hash: Option<Hash>,
+) -> Result<(), BlockError> {
+    // Only validate RandomX solutions
+    let randomx_hash = match header.solution {
+        Solution::RandomX(hash) => hash,
+        _ => return Ok(()), // Not a RandomX solution, skip validation
+    };
+
+    // Get the seed for this height
+    let seed_info = randomx::get_seed_info(height.0 as u64);
+    let seed = match seed_info {
+        SeedInfo::Genesis(genesis_seed) => genesis_seed,
+        SeedInfo::BlockHash(seed_height) => {
+            // We need the block hash at seed_height
+            let seed_hash = seed_block_hash.ok_or_else(|| {
+                BlockError::Other(format!(
+                    "missing seed block hash for RandomX validation at height {}, needs hash at height {}",
+                    height.0, seed_height.0
+                ))
+            })?;
+            seed_hash.0
+        }
+    };
+
+    // Serialize the header (without solution) to get the input
+    // The RandomX input is: header fields before nonce and solution || nonce
+    // This matches Juno Cash: CEquihashInput (108 bytes) + nNonce (32 bytes) = 140 bytes
+    let mut input = Vec::new();
+    header
+        .zcash_serialize(&mut input)
+        .expect("serialization into a vec can't fail");
+
+    // Truncate to INPUT_LENGTH + NONCE_LENGTH (excludes only the solution bytes)
+    // INPUT_LENGTH = 108 bytes (header without nNonce and nSolution)
+    // NONCE_LENGTH = 32 bytes (the nonce)
+    const NONCE_LENGTH: usize = 32;
+    input.truncate(Solution::INPUT_LENGTH + NONCE_LENGTH);
+
+    // Verify the RandomX hash
+    randomx::verify_randomx(&seed, &input, &randomx_hash).map_err(|e| match e {
+        RandomXError::HashMismatch { expected, computed } => BlockError::Other(format!(
+            "RandomX hash mismatch at height {}: expected {}, computed {}",
+            height.0, expected, computed
+        )),
+        other => BlockError::Other(format!("RandomX verification failed at height {}: {}", height.0, other)),
+    })
+}
+
 /// Returns `Ok()` with the deferred pool balance change of the coinbase transaction if
 /// the block subsidy in `block` is valid for `network`
 ///
@@ -173,11 +244,12 @@ pub fn subsidy_is_valid(
 
     let slow_start_interval = network.slow_start_interval();
 
+    // Juno Cash: Handle slow start and plateau blocks (no funding streams)
+    // For Juno Cash, there are no funding streams in blocks below Canopy activation
+    // or during the slow start/plateau phases.
     if height < slow_start_interval {
-        unreachable!(
-            "unsupported block height: callers should handle blocks below {:?}",
-            slow_start_interval
-        )
+        // No funding stream validation needed for slow start blocks
+        return Ok(DeferredPoolBalanceChange::zero());
     } else if halving_div.count_ones() != 1 {
         unreachable!("invalid halving divisor: the halving divisor must be a non-zero power of two")
     } else if height < canopy_activation_height {

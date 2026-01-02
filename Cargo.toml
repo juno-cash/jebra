@@ -156,6 +156,9 @@ zcash_script = "0.4.2"
 config = { version = "0.15.14", features = ["toml"] }
 which = "8.0.0"
 
+# Juno Cash RandomX PoW
+randomx-rs = "1.4"
+
 [workspace.metadata.release]
 
 # We always do releases from the main branch
@@ -298,3 +301,8 @@ unexpected_cfgs = { level = "warn", check-cfg = [
     'cfg(tokio_unstable)', # Used by tokio-console
     'cfg(zcash_unstable, values("zfuture", "nu6.1", "nu7"))' # Used in Zebra and librustzcash
 ] }
+
+# Juno Cash: Override zcash_protocol with local version that has Juno-specific HRPs
+# for unified addresses (j1, jtest1, jregtest1) instead of Zcash HRPs (u1, utest1, uregtest1)
+[patch.crates-io]
+zcash_protocol = { path = "crates/zcash_protocol" }

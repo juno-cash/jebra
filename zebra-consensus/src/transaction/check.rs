@@ -23,6 +23,10 @@ use zebra_chain::{
 
 use crate::error::TransactionError;
 
+/// Juno Cash: Height after which Orchard-to-transparent is banned.
+/// This is ORCHARD_TRANSPARENT_LOCK_HEIGHT from Juno Cash.
+pub const JUNO_ORCHARD_TRANSPARENT_LOCK_HEIGHT: Height = Height(40_000);
+
 /// Checks if the transaction's lock time allows this transaction to be included in a block.
 ///
 /// Arguments:
@@ -552,6 +556,110 @@ pub fn consensus_branch_id(
 
     if tx_nu != current_nu {
         return Err(TransactionError::WrongConsensusBranchId);
+    }
+
+    Ok(())
+}
+
+// ============================================================================
+// Juno Cash Consensus Rules
+// ============================================================================
+//
+// Juno Cash is an Orchard-only chain with the following restrictions:
+// - No Sprout JoinSplits
+// - No Sapling spends or outputs
+// - No unshielding (Orchard→transparent) after height 40000
+// - No transparent-to-transparent (except coinbase) after height 40000
+// - Coinbase must be shielded when spent
+
+/// Juno Cash: Reject transactions with Sprout JoinSplits.
+///
+/// Juno Cash is an Orchard-only chain and does not support Sprout.
+pub fn juno_no_sprout_joinsplits(tx: &Transaction) -> Result<(), TransactionError> {
+    if tx.joinsplit_count() > 0 {
+        return Err(TransactionError::JunoSproutNotSupported);
+    }
+    Ok(())
+}
+
+/// Juno Cash: Reject transactions with Sapling spends or outputs.
+///
+/// Juno Cash is an Orchard-only chain and does not support Sapling.
+pub fn juno_no_sapling_spends_or_outputs(tx: &Transaction) -> Result<(), TransactionError> {
+    // Check for Sapling spends
+    if tx.sapling_spends_per_anchor().count() > 0 {
+        return Err(TransactionError::JunoSaplingNotSupported);
+    }
+
+    // Check for Sapling outputs
+    if tx.sapling_outputs().count() > 0 {
+        return Err(TransactionError::JunoSaplingNotSupported);
+    }
+
+    Ok(())
+}
+
+/// Juno Cash: Reject Orchard→transparent transactions after height 40000.
+///
+/// After ORCHARD_TRANSPARENT_LOCK_HEIGHT, transactions cannot unshield from
+/// Orchard to transparent outputs.
+pub fn juno_no_orchard_to_transparent(
+    tx: &Transaction,
+    height: Height,
+) -> Result<(), TransactionError> {
+    // Only enforce after the lock height
+    if height < JUNO_ORCHARD_TRANSPARENT_LOCK_HEIGHT {
+        return Ok(());
+    }
+
+    // Check if transaction has Orchard spends
+    let has_orchard_spends = tx.orchard_shielded_data().map_or(false, |data| {
+        data.flags.contains(zebra_chain::orchard::Flags::ENABLE_SPENDS) && data.actions().next().is_some()
+    });
+
+    // Check if transaction has transparent outputs (not counting coinbase)
+    let has_transparent_outputs = !tx.outputs().is_empty();
+
+    if has_orchard_spends && has_transparent_outputs && !tx.is_coinbase() {
+        return Err(TransactionError::JunoOrchardToTransparentNotAllowed(height));
+    }
+
+    Ok(())
+}
+
+/// Juno Cash: Reject transparent-to-transparent transactions after height 40000.
+///
+/// After ORCHARD_TRANSPARENT_LOCK_HEIGHT, non-coinbase transactions cannot
+/// spend transparent inputs to transparent outputs without shielding to Orchard.
+pub fn juno_no_transparent_to_transparent(
+    tx: &Transaction,
+    height: Height,
+) -> Result<(), TransactionError> {
+    // Only enforce after the lock height
+    if height < JUNO_ORCHARD_TRANSPARENT_LOCK_HEIGHT {
+        return Ok(());
+    }
+
+    // Coinbase is always allowed
+    if tx.is_coinbase() {
+        return Ok(());
+    }
+
+    // Check if transaction spends transparent inputs
+    let has_transparent_inputs = !tx.inputs().is_empty()
+        && tx.inputs().iter().any(|input| !matches!(input, zebra_chain::transparent::Input::Coinbase { .. }));
+
+    // Check if transaction has transparent outputs
+    let has_transparent_outputs = !tx.outputs().is_empty();
+
+    // Check if transaction shields to Orchard
+    let shields_to_orchard = tx.orchard_shielded_data().map_or(false, |data| {
+        data.flags.contains(zebra_chain::orchard::Flags::ENABLE_OUTPUTS) && data.actions().next().is_some()
+    });
+
+    // If spending transparent and outputting transparent without shielding, reject
+    if has_transparent_inputs && has_transparent_outputs && !shields_to_orchard {
+        return Err(TransactionError::JunoTransparentToTransparentNotAllowed);
     }
 
     Ok(())

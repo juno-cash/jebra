@@ -65,6 +65,9 @@ byteorder = { workspace = true }
 
 equihash = { workspace = true }
 
+# Juno Cash RandomX PoW
+randomx-rs = { workspace = true }
+
 group = { workspace = true }
 incrementalmerkletree.workspace = true
 jubjub = { workspace = true }

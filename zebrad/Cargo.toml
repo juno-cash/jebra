@@ -2,15 +2,15 @@
 # Crate metadata
 name = "zebrad"
 version = "3.1.0"
-authors = ["Zcash Foundation <zebra@zfnd.org>"]
-description = "The Zcash Foundation's independent, consensus-compatible implementation of a Zcash node"
+authors = ["Juno Cash developers"]
+description = "Jebra: A Juno Cash node based on the Zebra Zcash implementation"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/ZcashFoundation/zebra"
 
 readme = "../README.md"
-homepage = "https://zfnd.org/zebra/"
+homepage = "https://juno.cash/"
 # crates.io is limited to 5 keywords and categories
-keywords = ["zebra", "zcash"]
+keywords = ["jebra", "juno", "zcash"]
 # Must be one of <https://crates.io/category_slugs>
 categories = ["command-line-utilities", "cryptography::cryptocurrencies"]
 
@@ -23,9 +23,13 @@ rust-version = "1.89.0"
 
 # Settings that impact runtime behaviour
 
-# make `cargo run` use `zebrad` by default
+# make `cargo run` use `jebrad` by default
 # when run in the workspace directory
-default-run = "zebrad"
+default-run = "jebrad"
+
+[[bin]]
+name = "jebrad"
+path = "src/bin/zebrad/main.rs"
 
 # `cargo release` settings
 [package.metadata.release]

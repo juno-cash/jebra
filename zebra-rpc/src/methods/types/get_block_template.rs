@@ -189,6 +189,27 @@ pub struct BlockTemplateResponse {
     // Optional TODO: use Height type, but check that deserialized heights are within Height::MAX
     pub(crate) height: u32,
 
+    /// The height of the block whose hash is used as the RandomX seed.
+    /// For genesis epoch (heights 0-2143), this is 0.
+    #[serde(rename = "randomxseedheight")]
+    #[new(default)]
+    pub(crate) randomx_seed_height: u32,
+
+    /// The RandomX seed hash (32 bytes, hex-encoded).
+    /// For genesis epoch, this is 0x08 followed by 31 zero bytes.
+    #[serde(rename = "randomxseedhash")]
+    #[serde(with = "hex")]
+    #[new(default)]
+    pub(crate) randomx_seed_hash: [u8; 32],
+
+    /// The next epoch's seed hash (for pre-caching when approaching epoch boundary).
+    /// Only present when within RANDOMX_SEEDHASH_EPOCH_LAG blocks of an epoch change.
+    #[serde(rename = "randomxnextseedhash")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
+    #[new(default)]
+    pub(crate) randomx_next_seed_hash: Option<[u8; 32]>,
+
     /// > the maximum time allowed
     ///
     /// <https://en.bitcoin.it/wiki/BIP_0023#Mutations>
@@ -255,6 +276,9 @@ impl fmt::Debug for BlockTemplateResponse {
             .field("cur_time", &self.cur_time)
             .field("bits", &self.bits)
             .field("height", &self.height)
+            .field("randomx_seed_height", &self.randomx_seed_height)
+            .field("randomx_seed_hash", &hex::encode(self.randomx_seed_hash))
+            .field("randomx_next_seed_hash", &self.randomx_next_seed_hash.map(hex::encode))
             .field("max_time", &self.max_time)
             .field("submit_old", &self.submit_old)
             .finish()
@@ -391,6 +415,10 @@ impl BlockTemplateResponse {
             bits: chain_tip_and_local_time.expected_difficulty,
 
             height: next_block_height.0,
+
+            randomx_seed_height: chain_tip_and_local_time.randomx_seed_height,
+            randomx_seed_hash: chain_tip_and_local_time.randomx_seed_hash,
+            randomx_next_seed_hash: chain_tip_and_local_time.randomx_next_seed_hash,
 
             max_time: chain_tip_and_local_time.max_time,
 

@@ -469,6 +469,20 @@ pub struct GetBlockTemplateChainInfo {
     /// The maximum time the miner can use in this block.
     /// Depends on the `tip_hash`, and the local clock on testnet.
     pub max_time: DateTime32,
+
+    // RandomX seed information for miners.
+    //
+    /// The height of the block whose hash is used as the RandomX seed.
+    /// For genesis epoch (heights 0-2143), this is 0.
+    pub randomx_seed_height: u32,
+
+    /// The RandomX seed hash (32 bytes).
+    /// For genesis epoch, this is 0x08 followed by 31 zero bytes.
+    pub randomx_seed_hash: [u8; 32],
+
+    /// The next epoch's seed hash (for pre-caching when approaching epoch boundary).
+    /// Only present when within RANDOMX_SEEDHASH_EPOCH_LAG blocks of an epoch change.
+    pub randomx_next_seed_hash: Option<[u8; 32]>,
 }
 
 /// Conversion from read-only [`ReadResponse`]s to read-write [`Response`]s.

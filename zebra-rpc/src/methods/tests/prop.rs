@@ -401,7 +401,10 @@ proptest! {
                             expected_difficulty: Default::default(),
                             cur_time: DateTime32::now(),
                             min_time: DateTime32::now(),
-                            max_time: DateTime32::now()
+                            max_time: DateTime32::now(),
+                            randomx_seed_height: 0,
+                            randomx_seed_hash: zebra_chain::work::randomx::genesis_seed(),
+                            randomx_next_seed_hash: None,
                         }));
                 }
             };
@@ -475,7 +478,10 @@ proptest! {
                             expected_difficulty: Default::default(),
                             cur_time: DateTime32::now(),
                             min_time: DateTime32::now(),
-                            max_time: DateTime32::now()
+                            max_time: DateTime32::now(),
+                            randomx_seed_height: 0,
+                            randomx_seed_hash: zebra_chain::work::randomx::genesis_seed(),
+                            randomx_next_seed_hash: None,
                         }));
                 }
             };

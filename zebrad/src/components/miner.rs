@@ -24,6 +24,16 @@ use zebra_chain::{
     shutdown::is_shutting_down,
     work::equihash::{Solution, SolverCancelled},
 };
+
+/// A block template with the RandomX seed hash for mining.
+#[derive(Clone, Debug)]
+pub struct MiningTemplate {
+    /// The block template to mine.
+    pub block: Arc<Block>,
+    /// The RandomX seed hash (from seed block or genesis).
+    /// Required for RandomX mining, ignored for Equihash.
+    pub randomx_seed_hash: [u8; 32],
+}
 use zebra_network::AddressBookPeers;
 use zebra_node_services::mempool;
 use zebra_rpc::{
@@ -233,7 +243,7 @@ pub async fn generate_block_templates<
     AddressBook,
 >(
     rpc: RpcImpl<Mempool, State, ReadState, Tip, AddressBook, BlockVerifierRouter, SyncStatus>,
-    template_sender: watch::Sender<Option<Arc<Block>>>,
+    template_sender: watch::Sender<Option<MiningTemplate>>,
 ) -> Result<(), Report>
 where
     Mempool: Service<
@@ -323,12 +333,18 @@ where
             rpc.network(),
         )?;
 
+        // Get the RandomX seed hash for mining
+        let randomx_seed_hash = template.randomx_seed_hash();
+
         // If the template has actually changed, send an updated template.
-        template_sender.send_if_modified(|old_block| {
-            if old_block.as_ref().map(|b| *b.header) == Some(*block.header) {
+        template_sender.send_if_modified(|old_template| {
+            if old_template.as_ref().map(|t| *t.block.header) == Some(*block.header) {
                 return false;
             }
-            *old_block = Some(Arc::new(block));
+            *old_template = Some(MiningTemplate {
+                block: Arc::new(block),
+                randomx_seed_hash,
+            });
             true
         });
 
@@ -359,7 +375,7 @@ pub async fn run_mining_solver<
     AddressBook,
 >(
     solver_id: u8,
-    mut template_receiver: WatchReceiver<Option<Arc<Block>>>,
+    mut template_receiver: WatchReceiver<Option<MiningTemplate>>,
     rpc: RpcImpl<Mempool, State, ReadState, Tip, AddressBook, BlockVerifierRouter, SyncStatus>,
 ) -> Result<(), Report>
 where
@@ -430,11 +446,11 @@ where
             continue;
         };
 
-        let height = template.coinbase_height().expect("template is valid");
+        let height = template.block.coinbase_height().expect("template is valid");
 
         // Set up the cancellation conditions for the miner.
         let mut cancel_receiver = template_receiver.clone();
-        let old_header = *template.header;
+        let old_header = *template.block.header;
         let cancel_fn = move || match cancel_receiver.has_changed() {
             // Guard against get_block_template() providing an identical header. This could happen
             // if something irrelevant to the block data changes, the time was within 1 second, or
@@ -445,7 +461,10 @@ where
                 // We only need to check header equality, because the block data is bound to the
                 // header.
                 if has_changed
-                    && Some(old_header) != cancel_receiver.cloned_watch_data().map(|b| *b.header)
+                    && Some(old_header)
+                        != cancel_receiver
+                            .cloned_watch_data()
+                            .map(|t| *t.block.header)
                 {
                     Err(SolverCancelled)
                 } else {
@@ -456,8 +475,8 @@ where
             Err(_sender_dropped) => Err(SolverCancelled),
         };
 
-        // Mine at least one block using the equihash solver.
-        let Ok(blocks) = mine_a_block(solver_id, template, cancel_fn).await else {
+        // Mine at least one block using the RandomX or Equihash solver.
+        let Ok(blocks) = mine_a_block(solver_id, template.block.clone(), template.randomx_seed_hash, cancel_fn).await else {
             // If the solver was cancelled, we're either shutting down, or we have a new template.
             if solver_id == 0 {
                 info!(
@@ -541,16 +560,20 @@ where
     Ok(())
 }
 
-/// Mines one or more blocks based on `template`. Calculates equihash solutions, checks difficulty,
-/// and returns as soon as it has at least one block. Uses a different nonce range for each
-/// `solver_id`.
+/// Mines one or more blocks based on `template`. Calculates RandomX or Equihash solutions,
+/// checks difficulty, and returns as soon as it has at least one block. Uses a different
+/// nonce range for each `solver_id`.
 ///
 /// If `cancel_fn()` returns an error, returns early with `Err(SolverCancelled)`.
+///
+/// For RandomX (Juno Cash), the `randomx_seed_hash` is used for mining.
+/// For Equihash (Zcash), the seed is ignored.
 ///
 /// See [`run_mining_solver()`] for more details.
 pub async fn mine_a_block<F>(
     solver_id: u8,
     template: Arc<Block>,
+    randomx_seed_hash: [u8; 32],
     cancel_fn: F,
 ) -> Result<AtLeastOne<Block>, SolverCancelled>
 where
@@ -575,7 +598,8 @@ where
                     info!(?error, "could not set miner to run at a low priority: running at default priority");
                 }
 
-                Solution::solve(header, cancel_fn)
+                // Pass the seed for RandomX mining (ignored for Equihash)
+                Solution::solve(header, cancel_fn, Some(randomx_seed_hash))
             }).expect("unable to spawn miner thread");
 
             miner_thread_handle.wait_for_panics()

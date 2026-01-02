@@ -607,6 +607,11 @@ where
             )?;
         } else {
             crate::block::check::difficulty_is_valid(&block.header, &self.network, &height, &hash)?;
+            // Note: For RandomX blocks (Juno Cash), equihash_solution_is_valid returns Ok(())
+            // without full RandomX validation. This is acceptable during checkpoint sync because:
+            // 1. The checkpoint hash guarantees the chain is valid
+            // 2. Difficulty checks are still performed above
+            // 3. Full RandomX validation happens for blocks past the last checkpoint
             crate::block::check::equihash_solution_is_valid(&block.header)?;
         }
 

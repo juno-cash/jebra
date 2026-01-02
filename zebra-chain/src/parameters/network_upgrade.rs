@@ -244,15 +244,23 @@ pub(crate) const CONSENSUS_BRANCH_IDS: &[(NetworkUpgrade, ConsensusBranchId)] = 
 ];
 
 /// The target block spacing before Blossom.
-const PRE_BLOSSOM_POW_TARGET_SPACING: i64 = 150;
+/// Juno Cash: 120 seconds (not 150 like Zcash).
+const PRE_BLOSSOM_POW_TARGET_SPACING: i64 = 120;
 
 /// The target block spacing after Blossom activation.
-pub const POST_BLOSSOM_POW_TARGET_SPACING: u32 = 75;
+/// Juno Cash: 60 seconds (not 75 like Zcash).
+pub const POST_BLOSSOM_POW_TARGET_SPACING: u32 = 60;
 
 /// The averaging window for difficulty threshold arithmetic mean calculations.
 ///
 /// `PoWAveragingWindow` in the Zcash specification.
-pub const POW_AVERAGING_WINDOW: usize = 17;
+/// Juno Cash Mainnet: 100 blocks (not 17 like Zcash).
+/// Juno Cash Testnet/Regtest: 17 blocks (same as Zcash).
+pub const POW_AVERAGING_WINDOW: usize = 100;
+
+/// The averaging window for Testnet difficulty calculations.
+/// Juno Cash Testnet uses 17 blocks (same as Zcash testnet).
+pub const TESTNET_POW_AVERAGING_WINDOW: usize = 17;
 
 /// The multiplier used to derive the testnet minimum difficulty block time gap
 /// threshold.
@@ -500,18 +508,32 @@ impl NetworkUpgrade {
     /// Returns the averaging window timespan for the network upgrade.
     ///
     /// `AveragingWindowTimespan` from the Zcash specification.
+    ///
+    /// Note: This uses the mainnet averaging window (100 blocks).
+    /// For testnet/regtest, use `averaging_window_timespan_for_network`.
     pub fn averaging_window_timespan(&self) -> Duration {
         self.target_spacing() * POW_AVERAGING_WINDOW.try_into().expect("fits in i32")
     }
 
+    /// Returns the averaging window timespan for a specific network.
+    ///
+    /// `AveragingWindowTimespan` from the Zcash specification.
+    ///
+    /// Juno Cash Mainnet: 100 blocks * target_spacing
+    /// Juno Cash Testnet/Regtest: 17 blocks * target_spacing
+    pub fn averaging_window_timespan_for_network(&self, network: &Network) -> Duration {
+        let pow_averaging_window = network.pow_averaging_window();
+        self.target_spacing() * pow_averaging_window.try_into().expect("fits in i32")
+    }
+
     /// Returns the averaging window timespan for `network` and `height`.
     ///
-    /// See [`NetworkUpgrade::averaging_window_timespan`] for details.
+    /// See [`NetworkUpgrade::averaging_window_timespan_for_network`] for details.
     pub fn averaging_window_timespan_for_height(
         network: &Network,
         height: block::Height,
     ) -> Duration {
-        NetworkUpgrade::current(network, height).averaging_window_timespan()
+        NetworkUpgrade::current(network, height).averaging_window_timespan_for_network(network)
     }
 
     /// Returns an iterator over [`NetworkUpgrade`] variants.

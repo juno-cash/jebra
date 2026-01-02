@@ -223,6 +223,22 @@ pub enum TransactionError {
 
     #[error("wrong tx format: tx version is ≥ 5, but `nConsensusBranchId` is missing")]
     MissingConsensusBranchId,
+
+    // ========================================================================
+    // Juno Cash Consensus Errors
+    // ========================================================================
+
+    #[error("Juno Cash: Sprout JoinSplits are not supported on this Orchard-only chain")]
+    JunoSproutNotSupported,
+
+    #[error("Juno Cash: Sapling spends/outputs are not supported on this Orchard-only chain")]
+    JunoSaplingNotSupported,
+
+    #[error("Juno Cash: Orchard-to-transparent transactions are not allowed after height {}", _0.0)]
+    JunoOrchardToTransparentNotAllowed(block::Height),
+
+    #[error("Juno Cash: transparent-to-transparent transactions must shield to Orchard")]
+    JunoTransparentToTransparentNotAllowed,
 }
 
 impl From<ValidateContextError> for TransactionError {
@@ -294,7 +310,12 @@ impl TransactionError {
             | DisabledAddToSproutPool
             | NotEnoughFlags
             | WrongConsensusBranchId
-            | MissingConsensusBranchId => 100,
+            | MissingConsensusBranchId
+            // Juno Cash consensus errors
+            | JunoSproutNotSupported
+            | JunoSaplingNotSupported
+            | JunoOrchardToTransparentNotAllowed(_)
+            | JunoTransparentToTransparentNotAllowed => 100,
 
             _other => 0,
         }

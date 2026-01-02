@@ -9,7 +9,10 @@ use zebra_chain::{
     history_tree::HistoryTree,
     parameters::{Network, NetworkUpgrade, POST_BLOSSOM_POW_TARGET_SPACING},
     serialization::{DateTime32, Duration32},
-    work::difficulty::{CompactDifficulty, PartialCumulativeWork, Work},
+    work::{
+        difficulty::{CompactDifficulty, PartialCumulativeWork, Work},
+        randomx::{genesis_seed, seed_height, RANDOMX_SEEDHASH_EPOCH_LAG},
+    },
 };
 
 use crate::{
@@ -65,13 +68,49 @@ pub fn get_block_template_chain_info(
     let (best_tip_height, best_tip_hash, best_relevant_chain, best_tip_history_tree) =
         best_relevant_chain_and_history_tree_result?;
 
-    Ok(difficulty_time_and_history_tree(
+    let mut result = difficulty_time_and_history_tree(
         best_relevant_chain,
         best_tip_height,
         best_tip_hash,
         network,
         best_tip_history_tree,
-    ))
+    );
+
+    // Calculate RandomX seed info for the next block (tip_height + 1)
+    let next_block_height = best_tip_height.0 + 1;
+    let randomx_seed_height = seed_height(next_block_height as u64) as u32;
+
+    // Get the seed hash
+    let randomx_seed_hash = if randomx_seed_height == 0 {
+        genesis_seed()
+    } else {
+        // Look up the block hash at seed_height
+        db.hash(Height(randomx_seed_height))
+            .map(|h| h.0)
+            .unwrap_or_else(genesis_seed)
+    };
+
+    // Check if we need to provide next epoch's seed (within LAG blocks of epoch change)
+    // Following junocashd: if seed_height(next_height + LAG) differs from current seed_height,
+    // we're in the lag period before an epoch change
+    let next_seed_height =
+        seed_height((next_block_height as u64) + RANDOMX_SEEDHASH_EPOCH_LAG) as u32;
+    let randomx_next_seed_hash = if next_seed_height != randomx_seed_height {
+        // We're approaching an epoch boundary, provide the next seed
+        if next_seed_height == 0 {
+            Some(genesis_seed())
+        } else {
+            db.hash(Height(next_seed_height)).map(|h| h.0)
+        }
+    } else {
+        None
+    };
+
+    result.randomx_seed_height = randomx_seed_height;
+    result.randomx_seed_hash = randomx_seed_hash;
+    result.randomx_next_seed_hash = randomx_next_seed_hash;
+
+    Ok(result)
 }
 
 /// Accepts a `non_finalized_state`, [`ZebraDb`], `num_blocks`, and a block hash to start at.
@@ -255,6 +294,10 @@ fn difficulty_time_and_history_tree(
         cur_time,
         min_time,
         max_time,
+        // RandomX seed fields are populated by the caller (get_block_template_chain_info)
+        randomx_seed_height: 0,
+        randomx_seed_hash: [0u8; 32],
+        randomx_next_seed_hash: None,
     };
 
     adjust_difficulty_and_time_for_testnet(&mut result, network, tip_height, relevant_data);

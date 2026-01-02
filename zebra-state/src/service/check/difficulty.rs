@@ -24,11 +24,23 @@ use zebra_chain::{
 /// `PoWMedianBlockSpan` in the Zcash specification.
 pub const POW_MEDIAN_BLOCK_SPAN: usize = 11;
 
-/// The overall block span used for adjusting Zcash block difficulty.
+/// The overall block span used for adjusting Zcash block difficulty (mainnet).
 ///
 /// `PoWAveragingWindow + PoWMedianBlockSpan` in the Zcash specification based on
 /// > ActualTimespan(height : N) := MedianTime(height) − MedianTime(height − PoWAveragingWindow)
+///
+/// Note: This constant is only used for mainnet. For testnet/regtest, use
+/// `pow_adjustment_block_span()` which returns the network-specific value.
 pub const POW_ADJUSTMENT_BLOCK_SPAN: usize = POW_AVERAGING_WINDOW + POW_MEDIAN_BLOCK_SPAN;
+
+/// Returns the proof-of-work adjustment block span for the given network.
+///
+/// This is `PoWAveragingWindow + PoWMedianBlockSpan`.
+/// Juno Cash Mainnet: 100 + 11 = 111 blocks
+/// Juno Cash Testnet/Regtest: 17 + 11 = 28 blocks
+pub fn pow_adjustment_block_span(network: &Network) -> usize {
+    network.pow_averaging_window() + POW_MEDIAN_BLOCK_SPAN
+}
 
 /// The damping factor for median timespan variance.
 ///
@@ -122,7 +134,8 @@ impl AdjustedDifficulty {
     ///
     /// # Panics
     ///
-    /// If the context contains fewer than 28 items.
+    /// If the context contains fewer than the required number of items
+    /// (28 for testnet/regtest, 111 for mainnet).
     pub fn new_from_header_time<C>(
         candidate_header_time: DateTime<Utc>,
         previous_block_height: block::Height,
@@ -134,9 +147,12 @@ impl AdjustedDifficulty {
     {
         let candidate_height = (previous_block_height + 1).expect("next block height is valid");
 
+        // Use network-specific adjustment block span
+        let adjustment_span = pow_adjustment_block_span(network);
+
         let (relevant_difficulty_thresholds, relevant_times) = context
             .into_iter()
-            .take(POW_ADJUSTMENT_BLOCK_SPAN)
+            .take(adjustment_span)
             .unzip::<_, _, Vec<_>, Vec<_>>();
 
         AdjustedDifficulty {
@@ -161,6 +177,11 @@ impl AdjustedDifficulty {
     /// Returns the configured network.
     pub fn network(&self) -> Network {
         self.network.clone()
+    }
+
+    /// Returns the proof-of-work averaging window for this network.
+    fn pow_averaging_window(&self) -> usize {
+        self.network.pow_averaging_window()
     }
 
     /// Calculate the expected `difficulty_threshold` for a candidate block, based
@@ -196,13 +217,25 @@ impl AdjustedDifficulty {
     /// Implements `ThresholdBits` from the Zcash specification. (Which excludes the
     /// Testnet minimum difficulty adjustment.)
     fn threshold_bits(&self) -> CompactDifficulty {
+        // Juno Cash: If we don't have enough blocks for the averaging window,
+        // return powLimit directly without timespan adjustment.
+        // This matches junocashd's GetNextWorkRequired which returns nProofOfWorkLimit
+        // when pindexFirst == NULL (not enough blocks).
+        let pow_averaging_window = self.pow_averaging_window();
+        if self.relevant_difficulty_thresholds.len() < pow_averaging_window {
+            return self.network.target_difficulty_limit().to_compact();
+        }
+
         let averaging_window_timespan = NetworkUpgrade::averaging_window_timespan_for_height(
             &self.network,
             self.candidate_height,
         );
 
-        let threshold = (self.mean_target_difficulty() / averaging_window_timespan.num_seconds())
-            * self.median_timespan_bounded().num_seconds();
+        let mean_target = self.mean_target_difficulty();
+        let median_bounded = self.median_timespan_bounded();
+
+        let threshold = (mean_target / averaging_window_timespan.num_seconds())
+            * median_bounded.num_seconds();
         let threshold = min(self.network.target_difficulty_limit(), threshold);
 
         threshold.to_compact()
@@ -215,21 +248,21 @@ impl AdjustedDifficulty {
     /// Implements `MeanTarget` from the Zcash specification.
     fn mean_target_difficulty(&self) -> ExpandedDifficulty {
         // In Zebra, contextual validation starts after Canopy activation, so we
-        // can assume that the relevant chain contains at least 17 blocks.
+        // can assume that the relevant chain contains at least the required blocks.
         // Therefore, the `PoWLimit` case of `MeanTarget()` from the Zcash
         // specification is unreachable.
 
+        let pow_averaging_window = self.pow_averaging_window();
         let averaging_window_thresholds =
-            if self.relevant_difficulty_thresholds.len() >= POW_AVERAGING_WINDOW {
-                &self.relevant_difficulty_thresholds[0..POW_AVERAGING_WINDOW]
+            if self.relevant_difficulty_thresholds.len() >= pow_averaging_window {
+                &self.relevant_difficulty_thresholds[0..pow_averaging_window]
             } else {
                 return self.network.target_difficulty_limit();
             };
 
-        // Since the PoWLimits are `2^251 − 1` for Testnet, and `2^243 − 1` for
-        // Mainnet, the sum of 17 `ExpandedDifficulty` will be less than or equal
-        // to: `(2^251 − 1) * 17 = 2^255 + 2^251 - 17`. Therefore, the sum can
-        // not overflow a u256 value.
+        // Juno Cash: PoWLimit is `2^243 − 1` for both Mainnet and Testnet.
+        // The sum of averaging_window `ExpandedDifficulty` values will be less than or equal
+        // to: `(2^243 − 1) * 100 = 2^250 + ...`. This fits in a U256.
         let total: ExpandedDifficulty = averaging_window_thresholds
             .iter()
             .map(|compact| {
@@ -239,7 +272,7 @@ impl AdjustedDifficulty {
             })
             .sum();
 
-        let divisor: U256 = POW_AVERAGING_WINDOW.into();
+        let divisor: U256 = pow_averaging_window.into();
         total / divisor
     }
 
@@ -294,13 +327,14 @@ impl AdjustedDifficulty {
     /// See [`Self::median_timespan_bounded`] for details.
     fn median_timespan(&self) -> Duration {
         let newer_median = self.median_time_past();
+        let pow_averaging_window = self.pow_averaging_window();
 
         // MedianTime(height : N) := median([ nTime(𝑖) for 𝑖 from max(0, height − PoWMedianBlockSpan) up to max(0, height − 1) ])
-        let older_median = if self.relevant_times.len() > POW_AVERAGING_WINDOW {
+        let older_median = if self.relevant_times.len() > pow_averaging_window {
             let older_times: Vec<_> = self
                 .relevant_times
                 .iter()
-                .skip(POW_AVERAGING_WINDOW)
+                .skip(pow_averaging_window)
                 .cloned()
                 .take(POW_MEDIAN_BLOCK_SPAN)
                 .collect();

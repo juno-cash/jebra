@@ -27,7 +27,10 @@ use zebra_chain::{
     block,
     parameters::{subsidy::SubsidyError, Network},
     transaction, transparent,
-    work::equihash,
+    work::{
+        equihash,
+        randomx::{self, SeedInfo},
+    },
 };
 use zebra_state as zs;
 
@@ -72,6 +75,9 @@ pub enum VerifyBlockError {
         source: equihash::Error,
     },
 
+    #[error("RandomX proof-of-work verification failed: {0}")]
+    RandomX(String),
+
     #[error(transparent)]
     Time(zebra_chain::block::BlockTimeError),
 
@@ -107,6 +113,7 @@ impl VerifyBlockError {
         match self {
             Block { source } => source.misbehavior_score(),
             Equihash { .. } => 100,
+            RandomX(_) => 100,
             _other => 0,
         }
     }
@@ -206,7 +213,42 @@ where
                 // Do the difficulty checks first, to raise the threshold for
                 // attacks that use any other fields.
                 check::difficulty_is_valid(&block.header, &network, &height, &hash)?;
-                check::equihash_solution_is_valid(&block.header)?;
+
+                // Juno Cash uses RandomX PoW, Zcash uses Equihash
+                if block.header.solution.is_randomx() {
+                    // Get the seed hash for RandomX validation
+                    let seed_info = randomx::get_seed_info(height.0 as u64);
+                    let seed_block_hash = match seed_info {
+                        SeedInfo::Genesis(_) => None, // Genesis seed is computed, not from state
+                        SeedInfo::BlockHash(seed_height) => {
+                            // Query the state for the block hash at the seed height
+                            let query_result = state_service
+                                .ready()
+                                .await
+                                .map_err(|source| VerifyBlockError::RandomX(format!("state service error: {source}")))?
+                                .call(zs::Request::BestChainBlockHash(seed_height))
+                                .await
+                                .map_err(|source| VerifyBlockError::RandomX(format!("failed to get seed block hash: {source}")))?;
+
+                            match query_result {
+                                zs::Response::BlockHash(Some(seed_hash)) => Some(seed_hash),
+                                zs::Response::BlockHash(None) => {
+                                    return Err(VerifyBlockError::RandomX(format!(
+                                        "seed block hash not found at height {}",
+                                        seed_height.0
+                                    )));
+                                }
+                                _ => unreachable!("wrong response to Request::BestChainBlockHash"),
+                            }
+                        }
+                    };
+
+                    check::randomx_solution_is_valid(&block.header, &height, seed_block_hash)
+                        .map_err(|e| VerifyBlockError::RandomX(e.to_string()))?;
+                } else {
+                    // Equihash validation for Zcash blocks
+                    check::equihash_solution_is_valid(&block.header)?;
+                }
             }
 
             // Next, check the Merkle root validity, to ensure that

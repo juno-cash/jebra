@@ -1172,6 +1172,9 @@ pub async fn test_mining_rpcs<State, ReadState>(
                     min_time: fake_min_time,
                     max_time: fake_max_time,
                     chain_history_root: fake_history_tree(network).hash(),
+                    randomx_seed_height: 0,
+                    randomx_seed_hash: zebra_chain::work::randomx::genesis_seed(),
+                    randomx_next_seed_hash: None,
                 }));
         }
     };

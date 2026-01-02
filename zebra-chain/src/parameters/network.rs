@@ -221,15 +221,19 @@ impl Network {
 
     /// Returns true if the maximum block time rule is active for `network` and `height`.
     ///
-    /// Always returns true if `network` is the Mainnet.
+    /// Juno Cash: The future timestamp soft fork rule activates at height 2 for mainnet
+    /// (nFutureTimestampSoftForkHeight = 2 in consensus/params.h).
     /// If `network` is the Testnet, the `height` should be at least
     /// TESTNET_MAX_TIME_START_HEIGHT to return true.
     /// Returns false otherwise.
     ///
     /// Part of the consensus rules at <https://zips.z.cash/protocol/protocol.pdf#blockheader>
     pub fn is_max_block_time_enforced(&self, height: block::Height) -> bool {
+        // Juno Cash: nFutureTimestampSoftForkHeight = 2 for mainnet
+        const MAINNET_FUTURE_TIMESTAMP_SOFT_FORK_HEIGHT: block::Height = block::Height(2);
+
         match self {
-            Network::Mainnet => true,
+            Network::Mainnet => height >= MAINNET_FUTURE_TIMESTAMP_SOFT_FORK_HEIGHT,
             // TODO: Move `TESTNET_MAX_TIME_START_HEIGHT` to a field on testnet::Parameters (#8364)
             Network::Testnet(_params) => height >= super::TESTNET_MAX_TIME_START_HEIGHT,
         }
@@ -238,9 +242,10 @@ impl Network {
     /// Get the default port associated to this network.
     pub fn default_port(&self) -> u16 {
         match self {
-            Network::Mainnet => 8233,
-            // TODO: Add a `default_port` field to `testnet::Parameters` to return here. (zcashd uses 18344 for Regtest)
-            Network::Testnet(_params) => 18233,
+            // Juno Cash mainnet port
+            Network::Mainnet => 8234,
+            // Juno Cash testnet port (regtest uses 18345)
+            Network::Testnet(_params) => 18234,
         }
     }
 

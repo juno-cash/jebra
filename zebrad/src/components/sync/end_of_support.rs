@@ -13,26 +13,28 @@ use zebra_chain::{
 use crate::application::release_version;
 
 /// The estimated height that this release will be published.
-pub const ESTIMATED_RELEASE_HEIGHT: u32 = 3_150_000;
+/// Juno Cash: Matches junocashd APPROX_RELEASE_HEIGHT.
+pub const ESTIMATED_RELEASE_HEIGHT: u32 = 1;
 
-/// The maximum number of days after `ESTIMATED_RELEASE_HEIGHT` where a Zebra server will run
+/// The maximum number of days after `ESTIMATED_RELEASE_HEIGHT` where a Jebra server will run
 /// without halting.
 ///
 /// Notes:
 ///
-/// - Zebra will exit with a panic if the current tip height is bigger than the
+/// - Jebra will exit with a panic if the current tip height is bigger than the
 ///   `ESTIMATED_RELEASE_HEIGHT` plus this number of days.
-/// - Currently set to 15 weeks.
-pub const EOS_PANIC_AFTER: u32 = 105;
+/// - Matches junocashd RELEASE_TO_DEPRECATION_WEEKS = 16 weeks = 112 days.
+pub const EOS_PANIC_AFTER: u32 = 112;
 
-/// The number of days before the end of support where Zebra will display warnings.
+/// The number of days before the end of support where Jebra will display warnings.
+/// Matches junocashd DEPRECATION_WARN_LIMIT = 14 days.
 pub const EOS_WARN_AFTER: u32 = EOS_PANIC_AFTER - 14;
 
-/// A string which is part of the panic that will be displayed if Zebra halts.
-pub const EOS_PANIC_MESSAGE_HEADER: &str = "Zebra refuses to run";
+/// A string which is part of the panic that will be displayed if Jebra halts.
+pub const EOS_PANIC_MESSAGE_HEADER: &str = "Jebra refuses to run";
 
-/// A string which is part of the warning that will be displayed if Zebra release is close to halting.
-pub const EOS_WARN_MESSAGE_HEADER: &str = "Your Zebra release is too old and it will stop running";
+/// A string which is part of the warning that will be displayed if Jebra release is close to halting.
+pub const EOS_WARN_MESSAGE_HEADER: &str = "Your Jebra release is too old and it will stop running";
 
 /// The amount of time between end of support checks.
 const CHECK_INTERVAL: Duration = Duration::from_secs(60 * 60);
@@ -82,16 +84,16 @@ pub fn check(tip_height: Height, network: &Network) {
         panic!(
             "{EOS_PANIC_MESSAGE_HEADER} if the release date is older than {EOS_PANIC_AFTER} days. \
             \nRelease name: {}, Estimated release height: {ESTIMATED_RELEASE_HEIGHT} \
-            \nHint: Download and install the latest Zebra release from: https://github.com/ZcashFoundation/zebra/releases/latest",
+            \nHint: Update to the latest Jebra release.",
             release_version()
         );
     } else if tip_height > warn_height {
         warn!(
             "{EOS_WARN_MESSAGE_HEADER} at block {}. \
             \nRelease name: {}, Estimated release height: {ESTIMATED_RELEASE_HEIGHT} \
-            \nHint: Download and install the latest Zebra release from: https://github.com/ZcashFoundation/zebra/releases/latest", panic_height.0, release_version()
+            \nHint: Update to the latest Jebra release.", panic_height.0, release_version()
         );
     } else {
-        info!("Zebra release is supported until block {}, please report bugs at https://github.com/ZcashFoundation/zebra/issues", panic_height.0);
+        info!("Jebra release is supported until block {}", panic_height.0);
     }
 }

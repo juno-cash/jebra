@@ -43,10 +43,10 @@ pub struct Config {
     ///
     /// |Platform | Value                                           | Example                              |
     /// | ------- | ----------------------------------------------- | ------------------------------------ |
-    /// | Linux   | `$XDG_CACHE_HOME/zebra` or `$HOME/.cache/zebra` | `/home/alice/.cache/zebra`           |
-    /// | macOS   | `$HOME/Library/Caches/zebra`                    | `/Users/Alice/Library/Caches/zebra`  |
-    /// | Windows | `{FOLDERID_LocalAppData}\zebra`                 | `C:\Users\Alice\AppData\Local\zebra` |
-    /// | Other   | `std::env::current_dir()/cache/zebra`           | `/cache/zebra`                       |
+    /// | Linux   | `$XDG_CACHE_HOME/jebra` or `$HOME/.cache/jebra` | `/home/alice/.cache/jebra`           |
+    /// | macOS   | `$HOME/Library/Caches/jebra`                    | `/Users/Alice/Library/Caches/jebra`  |
+    /// | Windows | `{FOLDERID_LocalAppData}\jebra`                 | `C:\Users\Alice\AppData\Local\jebra` |
+    /// | Other   | `std::env::current_dir()/cache/jebra`           | `/cache/jebra`                       |
     ///
     /// # Security
     ///
@@ -77,7 +77,7 @@ pub struct Config {
     /// Set to `false` by default. If this is set to `true`, [`cache_dir`] is ignored.
     ///
     /// Ephemeral directories are created in the [`std::env::temp_dir()`].
-    /// Zebra names each directory after the state version and network, for example: `zebra-state-v21-mainnet-XnyGnE`.
+    /// Jebra names each directory after the state version and network, for example: `jebra-state-v21-mainnet-XnyGnE`.
     ///
     /// [`cache_dir`]: struct.Config.html#structfield.cache_dir
     pub ephemeral: bool,
@@ -150,7 +150,7 @@ impl Config {
         let net_dir = network.lowercase_name();
 
         if self.ephemeral {
-            gen_temp_path(&format!("zebra-{db_kind}-{major_version}-{net_dir}-"))
+            gen_temp_path(&format!("jebra-{db_kind}-{major_version}-{net_dir}-"))
         } else {
             self.cache_dir
                 .join(db_kind)

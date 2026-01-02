@@ -80,8 +80,9 @@ impl zcash_address::TryFromAddress for Address {
     ) -> Result<Self, zcash_address::ConversionError<Self::Error>> {
         let network = network.into();
         let mut orchard = None;
-        let mut sapling = None;
-        let mut transparent = None;
+        // Juno Cash: Unified addresses are Orchard-only
+        let sapling = None;
+        let transparent = None;
 
         for receiver in unified_address.items().into_iter() {
             match receiver {
@@ -97,28 +98,38 @@ impl zcash_address::TryFromAddress for Address {
                         .into());
                     }
                 }
-                unified::Receiver::Sapling(data) => {
-                    sapling = sapling_crypto::PaymentAddress::from_bytes(&data);
-                    // ZIP 316: Consumers MUST reject Unified Addresses/Viewing Keys in
-                    // which any constituent Item does not meet the validation
-                    // requirements of its encoding.
-                    if sapling.is_none() {
-                        return Err(BoxError::from(
-                            "Unified Address contains an invalid Sapling receiver",
-                        )
-                        .into());
-                    }
+                // Juno Cash: Reject Sapling receivers in Unified Addresses (Orchard-only chain)
+                unified::Receiver::Sapling(_) => {
+                    return Err(BoxError::from(
+                        "Juno Cash: Sapling receivers not supported in Unified Addresses (Orchard-only chain)",
+                    )
+                    .into());
                 }
-                unified::Receiver::P2pkh(data) => {
-                    transparent = Some(transparent::Address::from_pub_key_hash(network, data));
+                // Juno Cash: Reject transparent receivers in Unified Addresses (Orchard-only chain)
+                unified::Receiver::P2pkh(_) => {
+                    return Err(BoxError::from(
+                        "Juno Cash: P2PKH receivers not supported in Unified Addresses (Orchard-only chain)",
+                    )
+                    .into());
                 }
-                unified::Receiver::P2sh(data) => {
-                    transparent = Some(transparent::Address::from_script_hash(network, data));
+                unified::Receiver::P2sh(_) => {
+                    return Err(BoxError::from(
+                        "Juno Cash: P2SH receivers not supported in Unified Addresses (Orchard-only chain)",
+                    )
+                    .into());
                 }
                 unified::Receiver::Unknown { .. } => {
                     return Err(BoxError::from("Unsupported receiver in a Unified Address.").into());
                 }
             }
+        }
+
+        // Juno Cash: Unified addresses must have an Orchard receiver
+        if orchard.is_none() {
+            return Err(BoxError::from(
+                "Juno Cash: Unified Address must contain an Orchard receiver",
+            )
+            .into());
         }
 
         Ok(Self::Unified {

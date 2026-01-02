@@ -92,6 +92,9 @@ async fn rpc_getinfo() {
             cur_time: zebra_chain::serialization::DateTime32::now(),
             min_time: zebra_chain::serialization::DateTime32::now(),
             max_time: zebra_chain::serialization::DateTime32::now(),
+            randomx_seed_height: 0,
+            randomx_seed_hash: zebra_chain::work::randomx::genesis_seed(),
+            randomx_next_seed_hash: None,
         },
     ));
 
@@ -2123,6 +2126,9 @@ async fn gbt_with(net: Network, addr: ZcashAddress) {
                     min_time: fake_min_time,
                     max_time: fake_max_time,
                     chain_history_root: fake_history_tree(&Mainnet).hash(),
+                    randomx_seed_height: 0,
+                    randomx_seed_hash: zebra_chain::work::randomx::genesis_seed(),
+                    randomx_next_seed_hash: None,
                 }));
         }
     };
@@ -2812,6 +2818,9 @@ async fn rpc_getdifficulty() {
                 min_time: fake_min_time,
                 max_time: fake_max_time,
                 chain_history_root: fake_history_tree(&Mainnet).hash(),
+                randomx_seed_height: 0,
+                randomx_seed_hash: zebra_chain::work::randomx::genesis_seed(),
+                randomx_next_seed_hash: None,
             }));
     };
 
@@ -2838,6 +2847,9 @@ async fn rpc_getdifficulty() {
                 min_time: fake_min_time,
                 max_time: fake_max_time,
                 chain_history_root: fake_history_tree(&Mainnet).hash(),
+                randomx_seed_height: 0,
+                randomx_seed_hash: zebra_chain::work::randomx::genesis_seed(),
+                randomx_next_seed_hash: None,
             }));
     };
 
@@ -2861,6 +2873,9 @@ async fn rpc_getdifficulty() {
                 min_time: fake_min_time,
                 max_time: fake_max_time,
                 chain_history_root: fake_history_tree(&Mainnet).hash(),
+                randomx_seed_height: 0,
+                randomx_seed_hash: zebra_chain::work::randomx::genesis_seed(),
+                randomx_next_seed_hash: None,
             }));
     };
 
@@ -2884,6 +2899,9 @@ async fn rpc_getdifficulty() {
                 min_time: fake_min_time,
                 max_time: fake_max_time,
                 chain_history_root: fake_history_tree(&Mainnet).hash(),
+                randomx_seed_height: 0,
+                randomx_seed_hash: zebra_chain::work::randomx::genesis_seed(),
+                randomx_next_seed_hash: None,
             }));
     };
 

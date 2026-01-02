@@ -44,13 +44,13 @@ pub const MAX_NETWORK_NAME_LENGTH: usize = 30;
 /// Maximum length for a configured human-readable prefix.
 pub const MAX_HRP_LENGTH: usize = 30;
 
-/// The block hash of the Regtest genesis block, `zcash-cli -regtest getblockhash 0`
+/// The block hash of the Juno Cash Regtest genesis block
 const REGTEST_GENESIS_HASH: &str =
-    "029f11d80ef9765602235e1bc9727e3eb6ba20839319f761fee920d63401e327";
+    "02a19528ff5e8241dc7601cf7f54a74d26e0f2acc393a7ac964d055e6d1925db";
 
-/// The block hash of the Testnet genesis block, `zcash-cli -testnet getblockhash 0`
+/// The block hash of the Juno Cash Testnet genesis block
 const TESTNET_GENESIS_HASH: &str =
-    "05a60a92d99d85997cce3b87616c089f6124d7342af37106edc76126334a2c38";
+    "009a83c6bd95d1f0548fe4c5f6555c785e9c456ca33f58c2d7755c2bdd1e842f";
 
 /// The halving height interval in the regtest is 6 hours.
 /// [zcashd regtest halving interval](https://github.com/zcash/zcash/blob/v5.10.0/src/consensus/params.h#L252)
@@ -453,12 +453,13 @@ impl Default for ParametersBuilder {
                 .parse()
                 .expect("hard-coded hash parses"),
             slow_start_interval: SLOW_START_INTERVAL,
-            // Testnet PoWLimit is defined as `2^251 - 1` on page 73 of the protocol specification:
-            // <https://zips.z.cash/protocol/protocol.pdf>
+            // Juno Cash: Testnet uses the same PoWLimit as mainnet (2^243 - 1),
+            // unlike Zcash which uses 2^251 - 1 for testnet.
+            // See junocash chainparams.cpp line 258: "07ffff..." (31 bytes) = 2^243 - 1
             //
             // The PoWLimit must be converted into a compact representation before using it
             // to perform difficulty filter checks (see https://github.com/zcash/zips/pull/417).
-            target_difficulty_limit: ExpandedDifficulty::from((U256::one() << 251) - 1)
+            target_difficulty_limit: ExpandedDifficulty::from((U256::one() << 243) - 1)
                 .to_compact()
                 .to_expanded()
                 .expect("difficulty limits are valid expanded values"),
@@ -1128,6 +1129,18 @@ impl Network {
             params.disable_pow()
         } else {
             false
+        }
+    }
+
+    /// Returns the proof-of-work averaging window for this network.
+    ///
+    /// Juno Cash Mainnet uses 100 blocks, Testnet/Regtest use 17 blocks.
+    pub fn pow_averaging_window(&self) -> usize {
+        use crate::parameters::{POW_AVERAGING_WINDOW, TESTNET_POW_AVERAGING_WINDOW};
+
+        match self {
+            Self::Mainnet => POW_AVERAGING_WINDOW,
+            Self::Testnet(_) => TESTNET_POW_AVERAGING_WINDOW,
         }
     }
 

@@ -22,6 +22,11 @@ mod tests;
 // TODO: allow Amount<NonNegative> in constants
 const MARGINAL_FEE: u64 = 100_000;
 
+/// The marginal fee for shielding transactions (those spending coinbase outputs),
+/// in zatoshis per logical action. This lower fee incentivizes miners to move
+/// coinbase rewards into the shielded pool.
+const SHIELDING_MARGINAL_FEE: u64 = 5_000;
+
 /// The number of grace logical actions allowed by the ZIP-317 fee calculation.
 const GRACE_ACTIONS: u32 = 2;
 
@@ -66,7 +71,21 @@ pub const MIN_MEMPOOL_TX_FEE_RATE: usize = 100;
 /// This is a `usize` to simplify transaction size-based calculation code.
 pub const MEMPOOL_TX_FEE_REQUIREMENT_CAP: usize = 1000;
 
+/// Returns the effective marginal fee based on whether the transaction spends coinbase outputs.
+/// Shielding transactions (spending coinbase) get a lower marginal fee to incentivize
+/// moving mining rewards into the shielded pool.
+fn effective_marginal_fee(spends_coinbase: bool) -> u64 {
+    if spends_coinbase {
+        SHIELDING_MARGINAL_FEE
+    } else {
+        MARGINAL_FEE
+    }
+}
+
 /// Returns the conventional fee for `transaction`, as defined by [ZIP-317].
+///
+/// Uses the standard `MARGINAL_FEE`. This is used when UTXO context is not available
+/// (e.g. when constructing `UnminedTx`).
 ///
 /// [ZIP-317]: https://zips.z.cash/zip-0317#fee-calculation
 pub fn conventional_fee(transaction: &Transaction) -> Amount<NonNegative> {
@@ -84,15 +103,39 @@ pub fn conventional_fee(transaction: &Transaction) -> Amount<NonNegative> {
     conventional_fee.expect("conventional fee is positive and limited by serialized size limit")
 }
 
+/// Returns the conventional fee for `transaction` using the effective marginal fee
+/// based on whether the transaction spends coinbase outputs.
+///
+/// Shielding transactions pay `SHIELDING_MARGINAL_FEE` per action instead of `MARGINAL_FEE`.
+pub fn conventional_fee_for_tx(
+    transaction: &Transaction,
+    spends_coinbase: bool,
+) -> Amount<NonNegative> {
+    let marginal_fee: Amount<NonNegative> = effective_marginal_fee(spends_coinbase)
+        .try_into()
+        .expect("fits in amount");
+
+    let conventional_fee = marginal_fee * conventional_actions(transaction).into();
+
+    conventional_fee.expect("conventional fee is positive and limited by serialized size limit")
+}
+
 /// Returns the number of unpaid actions for `transaction`, as defined by [ZIP-317].
 ///
+/// Uses the effective marginal fee based on whether the transaction spends coinbase outputs.
+///
 /// [ZIP-317]: https://zips.z.cash/zip-0317#block-production
-pub fn unpaid_actions(transaction: &UnminedTx, miner_fee: Amount<NonNegative>) -> u32 {
+pub fn unpaid_actions(
+    transaction: &UnminedTx,
+    miner_fee: Amount<NonNegative>,
+    spends_coinbase: bool,
+) -> u32 {
     // max(logical_actions, GRACE_ACTIONS)
     let conventional_actions = conventional_actions(&transaction.transaction);
 
     // floor(tx.fee / marginal_fee)
-    let marginal_fee_weight_ratio = miner_fee / MARGINAL_FEE;
+    let marginal_fee = effective_marginal_fee(spends_coinbase);
+    let marginal_fee_weight_ratio = miner_fee / marginal_fee;
     let marginal_fee_weight_ratio: i64 = marginal_fee_weight_ratio
         .expect("marginal fee is not zero")
         .into();
@@ -108,11 +151,13 @@ pub fn unpaid_actions(transaction: &UnminedTx, miner_fee: Amount<NonNegative>) -
 /// Returns the block production fee weight ratio for `transaction`, as defined by [ZIP-317].
 ///
 /// This calculation will always return a positive, non-zero value.
+/// Uses the effective marginal fee based on whether the transaction spends coinbase outputs.
 ///
 /// [ZIP-317]: https://zips.z.cash/zip-0317#block-production
 pub fn conventional_fee_weight_ratio(
     transaction: &UnminedTx,
     miner_fee: Amount<NonNegative>,
+    spends_coinbase: bool,
 ) -> f32 {
     // Check that this function will always return a positive, non-zero value.
     //
@@ -126,7 +171,8 @@ pub fn conventional_fee_weight_ratio(
 
     let miner_fee = max(miner_fee.into(), MIN_BLOCK_PRODUCTION_SUBSTITUTE_FEE) as f32;
 
-    let conventional_fee = i64::from(transaction.conventional_fee) as f32;
+    let conventional_fee =
+        i64::from(conventional_fee_for_tx(&transaction.transaction, spends_coinbase)) as f32;
 
     let uncapped_weight = miner_fee / conventional_fee;
 

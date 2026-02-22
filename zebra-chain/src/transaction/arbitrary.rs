@@ -851,6 +851,7 @@ impl Arbitrary for VerifiedUnminedTx {
                         conventional_actions,
                         unpaid_actions,
                         fee_weight_ratio,
+                        spends_coinbase: false,
                         time: Some(time),
                         height: Some(height),
                     }

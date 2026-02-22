@@ -599,10 +599,12 @@ where
                     sigops,
                 },
                 Request::Mempool { transaction: tx, .. } => {
+                    let spends_coinbase = spent_utxos.values().any(|utxo| utxo.from_coinbase);
                     let transaction = VerifiedUnminedTx::new(
                         tx,
                         miner_fee.expect("fee should have been checked earlier"),
                         sigops,
+                        spends_coinbase,
                     )?;
 
                     if let Some(mut mempool) = mempool {

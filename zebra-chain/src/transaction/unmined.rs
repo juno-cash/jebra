@@ -362,6 +362,11 @@ pub struct VerifiedUnminedTx {
     /// [ZIP-317]: https://zips.z.cash/zip-0317#block-production
     pub fee_weight_ratio: f32,
 
+    /// Whether this transaction spends coinbase outputs (shielding transaction).
+    /// Shielding transactions get a lower marginal fee to incentivize moving
+    /// mining rewards into the shielded pool.
+    pub spends_coinbase: bool,
+
     /// The time the transaction was added to the mempool, or None if it has not
     /// reached the mempool yet.
     pub time: Option<chrono::DateTime<chrono::Utc>>,
@@ -391,15 +396,18 @@ impl fmt::Display for VerifiedUnminedTx {
 
 impl VerifiedUnminedTx {
     /// Create a new verified unmined transaction from an unmined transaction,
-    /// its miner fee, and its legacy sigop count.
+    /// its miner fee, its legacy sigop count, and whether it spends coinbase outputs.
     pub fn new(
         transaction: UnminedTx,
         miner_fee: Amount<NonNegative>,
         legacy_sigop_count: u32,
+        spends_coinbase: bool,
     ) -> Result<Self, zip317::Error> {
-        let fee_weight_ratio = zip317::conventional_fee_weight_ratio(&transaction, miner_fee);
+        let fee_weight_ratio =
+            zip317::conventional_fee_weight_ratio(&transaction, miner_fee, spends_coinbase);
         let conventional_actions = zip317::conventional_actions(&transaction.transaction);
-        let unpaid_actions = zip317::unpaid_actions(&transaction, miner_fee);
+        let unpaid_actions =
+            zip317::unpaid_actions(&transaction, miner_fee, spends_coinbase);
 
         zip317::mempool_checks(unpaid_actions, miner_fee, transaction.size)?;
 
@@ -410,6 +418,7 @@ impl VerifiedUnminedTx {
             fee_weight_ratio,
             conventional_actions,
             unpaid_actions,
+            spends_coinbase,
             time: None,
             height: None,
         })
@@ -417,9 +426,15 @@ impl VerifiedUnminedTx {
 
     /// Returns `true` if the transaction pays at least the [ZIP-317] conventional fee.
     ///
+    /// Uses the effective marginal fee based on whether this transaction spends coinbase outputs.
+    ///
     /// [ZIP-317]: https://zips.z.cash/zip-0317#mempool-size-limiting
     pub fn pays_conventional_fee(&self) -> bool {
-        self.miner_fee >= self.transaction.conventional_fee
+        self.miner_fee
+            >= zip317::conventional_fee_for_tx(
+                &self.transaction.transaction,
+                self.spends_coinbase,
+            )
     }
 
     /// The cost in bytes of the transaction, as defined in [ZIP-401].

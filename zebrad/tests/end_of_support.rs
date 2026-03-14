@@ -9,12 +9,12 @@ use color_eyre::eyre::Result;
 use zebra_chain::{block::Height, chain_tip::mock::MockChainTip, parameters::Network};
 use zebrad::components::sync::end_of_support::{self, EOS_PANIC_AFTER, ESTIMATED_RELEASE_HEIGHT};
 
-// Estimated blocks per day with the current 75 seconds block spacing.
-const ESTIMATED_BLOCKS_PER_DAY: u32 = 1152;
+// Estimated blocks per day with the current 60 seconds block spacing.
+const ESTIMATED_BLOCKS_PER_DAY: u32 = 1440;
 
 /// Test that the `end_of_support` function is working as expected.
 #[test]
-#[should_panic(expected = "Zebra refuses to run if the release date is older than")]
+#[should_panic(expected = "Jebra refuses to run if the release date is older than")]
 fn end_of_support_panic() {
     // We are in panic
     let panic = ESTIMATED_RELEASE_HEIGHT + (EOS_PANIC_AFTER * ESTIMATED_BLOCKS_PER_DAY) + 1;
@@ -32,19 +32,19 @@ fn end_of_support_function() {
 
     end_of_support::check(Height(no_warn), &Network::Mainnet);
     assert!(logs_contain(
-        "Checking if Zebra release is inside support range ..."
+        "Checking if Jebra release is inside support range ..."
     ));
-    assert!(logs_contain("Zebra release is supported"));
+    assert!(logs_contain("Jebra release is supported"));
 
     // We are in warn range
-    let warn = ESTIMATED_RELEASE_HEIGHT + (EOS_PANIC_AFTER * 1152) - (3 * ESTIMATED_BLOCKS_PER_DAY);
+    let warn = ESTIMATED_RELEASE_HEIGHT + (EOS_PANIC_AFTER * ESTIMATED_BLOCKS_PER_DAY) - (3 * ESTIMATED_BLOCKS_PER_DAY);
 
     end_of_support::check(Height(warn), &Network::Mainnet);
     assert!(logs_contain(
-        "Checking if Zebra release is inside support range ..."
+        "Checking if Jebra release is inside support range ..."
     ));
     assert!(logs_contain(
-        "Your Zebra release is too old and it will stop running at block"
+        "Your Jebra release is too old and it will stop running at block"
     ));
 
     // Panic is tested in `end_of_support_panic`
@@ -62,10 +62,10 @@ fn end_of_support_date() {
 
     end_of_support::check(higher_checkpoint, &Network::Mainnet);
     assert!(logs_contain(
-        "Checking if Zebra release is inside support range ..."
+        "Checking if Jebra release is inside support range ..."
     ));
     assert!(!logs_contain(
-        "Your Zebra release is too old and it will stop running in"
+        "Your Jebra release is too old and it will stop running in"
     ));
 }
 
@@ -81,14 +81,14 @@ async fn end_of_support_task() -> Result<()> {
     tokio::time::timeout(Duration::from_secs(15), eos_future)
         .await
         .expect_err(
-            "end of support task unexpectedly exited: it should keep running until Zebra exits",
+            "end of support task unexpectedly exited: it should keep running until Jebra exits",
         );
 
     assert!(logs_contain(
-        "Checking if Zebra release is inside support range ..."
+        "Checking if Jebra release is inside support range ..."
     ));
 
-    assert!(logs_contain("Zebra release is supported"));
+    assert!(logs_contain("Jebra release is supported"));
 
     Ok(())
 }

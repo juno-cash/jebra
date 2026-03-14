@@ -14,7 +14,7 @@ use crate::application::release_version;
 
 /// The estimated height that this release will be published.
 /// Juno Cash: Matches junocashd APPROX_RELEASE_HEIGHT.
-pub const ESTIMATED_RELEASE_HEIGHT: u32 = 1;
+pub const ESTIMATED_RELEASE_HEIGHT: u32 = 130000;
 
 /// The maximum number of days after `ESTIMATED_RELEASE_HEIGHT` where a Jebra server will run
 /// without halting.
@@ -65,7 +65,7 @@ pub async fn start(
 
 /// Check if the current release is too old and panic if so.
 pub fn check(tip_height: Height, network: &Network) {
-    info!("Checking if Zebra release is inside support range ...");
+    info!("Checking if Jebra release is inside support range ...");
 
     // Get the current block spacing
     let target_block_spacing = NetworkUpgrade::target_spacing_for_height(network, tip_height);

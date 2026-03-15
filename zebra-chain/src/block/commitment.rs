@@ -139,6 +139,18 @@ impl Commitment {
                 }
             }
             (Heartwood | Canopy, _) => Ok(ChainHistoryRoot(ChainHistoryMmrRootHash(bytes))),
+            // When all upgrades are ALWAYS_ACTIVE (e.g., Juno Cash testnet), the
+            // Heartwood activation block may also be NU5+. In that case, the commitment
+            // bytes should still be the reserved value (all zeros) per ZIP-221.
+            (Nu5 | Nu6 | Nu6_1 | Nu7, _)
+                if Some(height) == Heartwood.activation_height(network) =>
+            {
+                if bytes == CHAIN_HISTORY_ACTIVATION_RESERVED {
+                    Ok(ChainHistoryActivationReserved)
+                } else {
+                    Err(InvalidChainHistoryActivationReserved { actual: bytes })
+                }
+            }
             (Nu5 | Nu6 | Nu6_1 | Nu7, _) => Ok(ChainHistoryBlockTxAuthCommitment(
                 ChainHistoryBlockTxAuthCommitmentHash(bytes),
             )),

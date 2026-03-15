@@ -7,18 +7,18 @@ use crate::{
 };
 
 proptest! {
-    /// Check that the mandatory checkpoint is immediately before Canopy activation.
+    /// Check that the mandatory checkpoint is at or before Canopy activation.
     #[test]
-    fn mandatory_checkpoint_is_immediately_before_canopy(network in any::<Network>()) {
+    fn mandatory_checkpoint_is_at_or_before_canopy(network in any::<Network>()) {
         let _init_guard = zebra_test::init();
 
-        let pre_canopy_activation = NetworkUpgrade::Canopy
+        let canopy_activation = NetworkUpgrade::Canopy
             .activation_height(&network)
-            .expect("Canopy activation height is set")
-            .previous()
-            .expect("Canopy activation should be above min height");
+            .expect("Canopy activation height is set");
 
-        assert!(network.mandatory_checkpoint_height() >= pre_canopy_activation);
+        // For Juno Cash where Canopy activates at genesis (Height(0)),
+        // mandatory_checkpoint_height() returns Height(0).
+        assert!(network.mandatory_checkpoint_height() <= canopy_activation);
     }
     #[test]
     /// Asserts that the activation height is correct for the block

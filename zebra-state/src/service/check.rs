@@ -189,12 +189,66 @@ pub(crate) fn block_commitment_is_valid_for_chain_history(
             //
             // The network is checked by [`Block::commitment`] above; it will only
             // return the block commitments if it's NU5 onward.
+            // Use the reserved (all-zeros) chain history root when the tree
+            // effectively hasn't started yet for commitment purposes:
+            //
+            // 1. The tree doesn't exist (Heartwood activation block)
+            // 2. The tree epoch changes from PreOrchard to OrchardOnward (NU5 activation)
+            // 3. The block immediately follows the Heartwood activation block - the
+            //    activation block was just added to the tree during its own commit, but
+            //    the commitment protocol treats the tree as empty until the next block
+            //    after the activation block has been committed (matching junocashd behavior
+            //    where GetHistoryRoot is called before PushHistoryNode in ConnectBlock)
+            let heartwood_activation = NetworkUpgrade::Heartwood.activation_height(network);
+
+            let use_reserved = block
+                .coinbase_height()
+                .map(|height| {
+                    let current_nu = NetworkUpgrade::current(network, height);
+                    let uses_orchard_tree = matches!(
+                        current_nu,
+                        NetworkUpgrade::Nu5
+                            | NetworkUpgrade::Nu6
+                            | NetworkUpgrade::Nu6_1
+                            | NetworkUpgrade::Nu7
+                    );
+
+                    // Case 2: Tree epoch changes from PreOrchard to OrchardOnward
+                    if uses_orchard_tree && height.0 > 0 {
+                        let prev_nu =
+                            NetworkUpgrade::current(network, block::Height(height.0 - 1));
+                        let prev_uses_orchard = matches!(
+                            prev_nu,
+                            NetworkUpgrade::Nu5
+                                | NetworkUpgrade::Nu6
+                                | NetworkUpgrade::Nu6_1
+                                | NetworkUpgrade::Nu7
+                        );
+                        if !prev_uses_orchard {
+                            return true;
+                        }
+                    }
+
+                    // Case 3: First block after Heartwood activation - the tree was just
+                    // initialized with the activation block but the commitment should
+                    // still use the reserved value
+                    if let Some(hw_height) = heartwood_activation {
+                        if height == block::Height(hw_height.0 + 1) {
+                            return true;
+                        }
+                    }
+
+                    false
+                })
+                .unwrap_or(false);
+
             let history_tree_root = history_tree
                 .hash()
+                .and_then(|root| if use_reserved { None } else { Some(root) })
                 .or_else(|| {
-                    (NetworkUpgrade::Heartwood.activation_height(network)
-                        == block.coinbase_height())
-                    .then_some(block::CHAIN_HISTORY_ACTIVATION_RESERVED.into())
+                    let is_heartwood_activation = heartwood_activation == block.coinbase_height();
+                    (is_heartwood_activation || use_reserved)
+                        .then_some(block::CHAIN_HISTORY_ACTIVATION_RESERVED.into())
                 })
                 .expect(
                     "the history tree of the previous block must exist \

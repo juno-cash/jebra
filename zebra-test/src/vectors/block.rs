@@ -72,6 +72,8 @@ lazy_static! {
             (8, BLOCK_MAINNET_8_BYTES.as_ref()),
             (9, BLOCK_MAINNET_9_BYTES.as_ref()),
             (10, BLOCK_MAINNET_10_BYTES.as_ref()),
+            (100, BLOCK_MAINNET_100_BYTES.as_ref()),
+            (200, BLOCK_MAINNET_200_BYTES.as_ref()),
             (202, BLOCK_MAINNET_202_BYTES.as_ref()),
             // The first block that contains a tx with a JoinSplit.
             (396, BLOCK_MAINNET_396_BYTES.as_ref()),
@@ -405,6 +407,12 @@ lazy_static! {
     // zcash-cli getblock 10 0 > block-main-0-000-010.txt
     pub static ref BLOCK_MAINNET_10_BYTES: Vec<u8> =
         <Vec<u8>>::from_hex(include_str!("block-main-0-000-010.txt").trim())
+        .expect("Block bytes are in valid hex representation");
+    pub static ref BLOCK_MAINNET_100_BYTES: Vec<u8> =
+        <Vec<u8>>::from_hex(include_str!("block-main-0-000-100.txt").trim())
+        .expect("Block bytes are in valid hex representation");
+    pub static ref BLOCK_MAINNET_200_BYTES: Vec<u8> =
+        <Vec<u8>>::from_hex(include_str!("block-main-0-000-200.txt").trim())
         .expect("Block bytes are in valid hex representation");
     pub static ref BLOCK_MAINNET_202_BYTES: Vec<u8> =
         <Vec<u8>>::from_hex(include_str!("block-main-0-000-202.txt").trim())

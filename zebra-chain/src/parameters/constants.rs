@@ -29,50 +29,56 @@ pub mod magics {
 }
 
 /// The block heights at which network upgrades activate.
-/// Juno Cash: All pre-NU5 upgrades are active from block 1 (ALWAYS_ACTIVE).
-/// NU5 activates at height 1, NU6 at height 2, NU6.1 at height 3.
+///
+/// Juno Cash activation heights match junocashd's chainparams.cpp:
+/// - Mainnet: Pre-NU5 upgrades use ALWAYS_ACTIVE (height 0), NU5 at 1, NU6 at 2, NU6.1 at 3
+/// - Testnet: All upgrades use ALWAYS_ACTIVE (height 0)
+///
+/// Note: When multiple upgrades share the same activation height, the BTreeMap
+/// used by activation_list() keeps only the last one at each height. This is
+/// correct: NetworkUpgrade::current() returns the latest active upgrade.
 pub mod activation_heights {
     /// Network upgrade activation heights for Testnet (Juno Cash testnet).
-    /// All upgrades are ALWAYS_ACTIVE from genesis on testnet.
+    /// All upgrades are ALWAYS_ACTIVE (height 0) on testnet.
     pub mod testnet {
         use crate::block::Height;
 
-        /// The block height at which `BeforeOverwinter` activates on Testnet.
-        pub const BEFORE_OVERWINTER: Height = Height(1);
+        /// The block height at which `BeforeOverwinter` activates on Testnet (ALWAYS_ACTIVE).
+        pub const BEFORE_OVERWINTER: Height = Height(0);
         /// The block height at which `Overwinter` activates on Testnet (ALWAYS_ACTIVE).
-        pub const OVERWINTER: Height = Height(1);
+        pub const OVERWINTER: Height = Height(0);
         /// The block height at which `Sapling` activates on Testnet (ALWAYS_ACTIVE).
-        pub const SAPLING: Height = Height(1);
+        pub const SAPLING: Height = Height(0);
         /// The block height at which `Blossom` activates on Testnet (ALWAYS_ACTIVE).
-        pub const BLOSSOM: Height = Height(1);
+        pub const BLOSSOM: Height = Height(0);
         /// The block height at which `Heartwood` activates on Testnet (ALWAYS_ACTIVE).
-        pub const HEARTWOOD: Height = Height(1);
+        pub const HEARTWOOD: Height = Height(0);
         /// The block height at which `Canopy` activates on Testnet (ALWAYS_ACTIVE).
-        pub const CANOPY: Height = Height(1);
+        pub const CANOPY: Height = Height(0);
         /// The block height at which `NU5` activates on Testnet (ALWAYS_ACTIVE).
-        pub const NU5: Height = Height(1);
+        pub const NU5: Height = Height(0);
         /// The block height at which `NU6` activates on Testnet (ALWAYS_ACTIVE).
-        pub const NU6: Height = Height(1);
+        pub const NU6: Height = Height(0);
         /// The block height at which `NU6.1` activates on Testnet (ALWAYS_ACTIVE).
-        pub const NU6_1: Height = Height(1);
+        pub const NU6_1: Height = Height(0);
     }
 
     /// Network upgrade activation heights for Mainnet (Juno Cash mainnet).
     pub mod mainnet {
         use crate::block::Height;
 
-        /// The block height at which `BeforeOverwinter` activates on Mainnet.
-        pub const BEFORE_OVERWINTER: Height = Height(1);
+        /// The block height at which `BeforeOverwinter` activates on Mainnet (ALWAYS_ACTIVE).
+        pub const BEFORE_OVERWINTER: Height = Height(0);
         /// The block height at which `Overwinter` activates on Mainnet (ALWAYS_ACTIVE).
-        pub const OVERWINTER: Height = Height(1);
+        pub const OVERWINTER: Height = Height(0);
         /// The block height at which `Sapling` activates on Mainnet (ALWAYS_ACTIVE).
-        pub const SAPLING: Height = Height(1);
+        pub const SAPLING: Height = Height(0);
         /// The block height at which `Blossom` activates on Mainnet (ALWAYS_ACTIVE).
-        pub const BLOSSOM: Height = Height(1);
+        pub const BLOSSOM: Height = Height(0);
         /// The block height at which `Heartwood` activates on Mainnet (ALWAYS_ACTIVE).
-        pub const HEARTWOOD: Height = Height(1);
+        pub const HEARTWOOD: Height = Height(0);
         /// The block height at which `Canopy` activates on Mainnet (ALWAYS_ACTIVE).
-        pub const CANOPY: Height = Height(1);
+        pub const CANOPY: Height = Height(0);
         /// The block height at which `NU5` activates on Mainnet.
         pub const NU5: Height = Height(1);
         /// The block height at which `NU6` activates on Mainnet.

@@ -78,9 +78,20 @@ impl ZcashDeserialize for Action {
             // Type is SpendAuthSig^{Orchard}.Public, i.e. ℙ.
             // https://zips.z.cash/protocol/protocol.pdf#concretespendauthsig
             // https://zips.z.cash/protocol/protocol.pdf#concretereddsa
-            // This only reads the 32-byte buffer. The type is enforced
-            // on signature verification; see [`reddsa::batch`]
-            rk: reader.read_32_bytes()?.into(),
+            // This only reads the 32-byte buffer. The full type is enforced
+            // on signature verification; see [`reddsa::batch`]. The
+            // all-zeros encoding is rejected here because it represents the
+            // identity point and would otherwise crash Halo2 proof
+            // verification (matches junocashd consensus rule).
+            rk: {
+                let rk_bytes = reader.read_32_bytes()?;
+                if rk_bytes == [0u8; 32] {
+                    return Err(SerializationError::Parse(
+                        "Orchard action rk must not be the identity point",
+                    ));
+                }
+                rk_bytes.into()
+            },
             // Type is `{0 .. 𝑞_ℙ − 1}`. Note that the second rule quoted above
             // is also enforced here and it is technically redundant with the first.
             // See [`pallas::Base::zcash_deserialize`].
